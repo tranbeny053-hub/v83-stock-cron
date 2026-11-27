@@ -216,6 +216,56 @@ def test_the_rows_a_user_reads() -> None:
     assert refuses_unknown, "a view of an unknown schema version is never rendered"
 
 
+def test_overview_card_renders_reference_label_with_decision_view_and_no_heat() -> None:
+    assert NODE is not None, "node is required to run the real app.js"
+    source = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
+    card = _extract_function(source, "overviewCard")
+    script = "\n".join(
+        [
+            "const inserted = []; const classes = []; const styles = {};",
+            "const fakeNode = {classList:{add:(x)=>classes.push(x)},dataset:{},",
+            "style:{setProperty:(k,v)=>styles[k]=v},",
+            "querySelector:(s)=>s==='h2'?{}:s==='.news-note'?{set textContent(v){}}:",
+            "s==='.detail-button'?{addEventListener(){}}:{},",
+            "insertBefore:(child)=>inserted.push(child),addEventListener(){}};",
+            "const overviewTemplate={content:{firstElementChild:{cloneNode:()=>fakeNode}}};",
+            "const document={createElement:()=>({className:'',textContent:'',dataset:{}})};",
+            "const backendText=(v)=>typeof v==='string'&&v.length?v:null;",
+            "const decisionViewOf=(p)=>p.decision_view;",
+            "const decisionDataBanner=()=> 'data'; const dataBannerText=()=> 'data';",
+            "const gateViewOf=()=>({}); const gateFramingBlocks=()=>[];",
+            "const getScoreHeatBand=()=>({className:'heat-hot',mainColor:'#dc2626',level:'HOT'});",
+            "const notAssessedByView=()=>false; const decisionViewRows=()=>[];",
+            "const appendDefinitionRows=()=>{}; const formatPct=(v)=>String(v);",
+            "const dispositionLabel=()=> 'Disposition'; const firstReason=()=> '';",
+            "const openDetail=()=>{}; const modelReadinessCopy='';",
+            card,
+            "const payload={normalized_symbol:'BTC/USDT',timeframes:{primary:'4H'},run_id:'r1',",
+            "frontend_display:{total_score:92,horizon_approx_label:'4H'},",
+            "decision_brief:{probability_type:",
+            "'DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY',",
+            "uncalibrated_banner:",
+            "'Historical-frequency reference · Descriptive estimate — not validated.'},",
+            "decision_view:{state:'NO_ACCEPTED_CLAIM',headline:'No claim',",
+            "detail:'No claim detail',data:{}},",
+            "news_addon_state:{status:'OK'}};",
+            "overviewCard(payload);",
+            "console.log(JSON.stringify({label:inserted.find((x)=>x.textContent&&x.textContent.startsWith('Historical-frequency'))?.textContent||null,classes,styles}));",
+        ]
+    )
+    completed = subprocess.run(  # noqa: S603 - node receives the local cut-out test script
+        [NODE, "-e", script], capture_output=True, text=True, check=False, timeout=30
+    )
+    assert completed.returncode == 0, completed.stderr
+    rendered = json.loads(completed.stdout)
+    assert rendered["label"] == (
+        "Historical-frequency reference · Descriptive estimate — not validated."
+    )
+    assert "heat-hot" not in rendered["classes"]
+    assert "--heat-main" not in rendered["styles"]
+    assert "--heat-border" not in rendered["styles"]
+
+
 @pytest.mark.parametrize(
     "display, expected_lines",
     [
@@ -226,7 +276,7 @@ def test_the_rows_a_user_reads() -> None:
                     "In band: 3 of 14 matured six-bar outcomes over the last 28 days ended "
                     "inside today's decision band."
                 ),
-                "direction_line": "Up and Down are split equally: no direction.",
+                "direction_line": "Symmetric by design — no directional signal.",
                 "overlap_line": "Outcomes overlap: each shares half its horizon with the next.",
                 "honesty_line": (
                     "Not a validated forecast and not a prediction interval. "

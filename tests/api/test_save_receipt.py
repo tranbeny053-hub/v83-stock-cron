@@ -215,6 +215,7 @@ def assert_run_not_found(client: TestClient, run_id: str) -> None:
 # ------------------------------------------------------------------------ the contract
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_an_acknowledged_durable_save_reads_saved_in_the_exact_contract() -> None:
     store = Store()
     client = client_with(rest(store))
@@ -247,6 +248,7 @@ def test_an_acknowledged_durable_save_reads_saved_in_the_exact_contract() -> Non
     ],
     ids=["503", "transport-error", "refused", "unreadable", "detail-not-kept", "snapshot-not-kept"],
 )
+@pytest.mark.usefixtures("lean_reference_off")
 def test_a_save_the_store_did_not_acknowledge_reads_failed(forecast: object) -> None:
     """The audit's case: storage read "available" when the analysis ran, and the save failed."""
 
@@ -338,6 +340,7 @@ def test_the_real_executor_settles_the_receipt_from_its_own_thread(
     assert state(client, run_id) == "SAVED"
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_a_pending_receipt_becomes_failed_when_the_held_save_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -459,6 +462,7 @@ def restart(monkeypatch: pytest.MonkeyPatch, repository: object) -> TestClient:
     return client_with(repository)
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_after_a_restart_only_the_durable_store_can_say_saved(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -492,6 +496,7 @@ def test_after_a_restart_an_unreadable_store_proves_nothing(
     assert_run_not_found(restart(monkeypatch, Unreadable()), run_id)
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_a_stateless_repository_never_reads_saved(monkeypatch: pytest.MonkeyPatch) -> None:
     """It answers the detail route from process memory. That is not a durable copy."""
 
@@ -506,6 +511,7 @@ def test_a_stateless_repository_never_reads_saved(monkeypatch: pytest.MonkeyPatc
     assert_run_not_found(same_repository_new_store, "run_that_never_was")
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_a_held_run_without_a_record_asks_the_store(
     receipts: SaveReceipts, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -533,6 +539,7 @@ def test_a_held_run_without_a_record_asks_the_store(
     ],
     ids=["saved", "failed", "no-repository"],
 )
+@pytest.mark.usefixtures("lean_reference_off")
 def test_a_record_still_answers_when_the_run_store_has_let_the_run_go(
     repository, expected: str
 ) -> None:
@@ -552,6 +559,7 @@ def test_a_record_still_answers_when_the_run_store_has_let_the_run_go(
 # ------------------------------------------------------------------------ batch
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_each_ok_item_of_a_batch_has_its_own_receipt() -> None:
     store = Store()
     client = client_with(rest(store))
@@ -575,6 +583,7 @@ def test_each_ok_item_of_a_batch_has_its_own_receipt() -> None:
     assert set(store.kept) == set(run_ids)
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_a_batch_item_whose_save_fails_reads_failed_beside_one_that_is_saved(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -622,6 +631,7 @@ def frozen_analysis(monkeypatch: pytest.MonkeyPatch, repository: object) -> http
     return response
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_the_analyze_response_is_what_it_was_before_the_receipt_existed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -748,11 +748,24 @@ def test_wave4a2_cards_show_probabilities_without_repeated_note() -> None:
 def test_served_reference_card_shows_backend_readiness_copy() -> None:
     card = extract_javascript_function(read_frontend("app.js"), "overviewCard")
     assert (
-        'referenceBrief?.probability_type === "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY"'
+        "payload.decision_brief?.probability_type === "
+        '"DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY"'
         in card
     )
+    assert "if (servedReference && backendText(referenceBrief.uncalibrated_banner))" in card
     assert "referenceLabel.textContent = referenceBrief.uncalibrated_banner" in card
     assert 'node.insertBefore(referenceLabel, node.querySelector("dl"))' in card
+
+
+def test_served_reference_matrix_card_shows_label_after_headline_without_heat() -> None:
+    card = extract_javascript_function(read_frontend("app.js"), "horizonCard")
+    assert 'referenceLabel.className = "model-readiness"' in card
+    assert "referenceLabel.textContent = referenceBrief.uncalibrated_banner" in card
+    assert "node.append(headline);" in card
+    assert card.index("node.append(headline);") < card.index("node.append(referenceLabel);")
+    assert "node.classList.add(heatBand.className)" not in card
+    assert "if (!servedReference)" in card
+    assert 'node.style.setProperty("--heat-main", heatBand.mainColor)' in card
 
 
 def test_frontend_does_not_present_placeholder_confidence_as_real_confidence() -> None:

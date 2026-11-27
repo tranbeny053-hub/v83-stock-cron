@@ -1008,3 +1008,17 @@ def test_the_detail_route_answers_200_for_whatever_gate_result_a_stored_run_hold
     assert (answer["saved_run_view"]["gates"] is None) is (
         answer["saved_run_view"]["gates_note"] is not None
     )
+
+
+def test_saved_reference_gate_summary_uses_stored_probability_type() -> None:
+    stored = {
+        "invalidation_detail": EVIDENCE_GATE,
+        "decision_brief": {
+            "probability_type": "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY"
+        },
+    }
+    saved = saved_run_view.build_saved_run_view(stored)
+    assert saved["gates"]["summary"] == (
+        "Evidence gate: predictive performance has not been validated for this reference. "
+        "No risk gate is active."
+    )

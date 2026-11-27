@@ -74,6 +74,8 @@ def _setup(
     *,
     provider: str = "binance",
 ) -> None:
+    # This suite pins the legacy/off path, including the frozen parity response.
+    monkeypatch.setattr(service, "LEAN_REFERENCE_ENABLED", False)
     snapshot = maker(provider=provider, timeframe=tf)
     monkeypatch.setattr(service, "_stamp_clock", lambda: FROZEN)
     monkeypatch.setattr(service, "uuid4", lambda: SimpleNamespace(hex="1031-frozen-run-id"))

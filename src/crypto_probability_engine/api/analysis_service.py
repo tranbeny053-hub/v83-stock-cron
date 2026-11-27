@@ -118,7 +118,7 @@ _PERSISTENCE_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="uc
 # OFF by owner R3a (2026-11-04). Turning this on is activation: a reviewed code change, then T3/T4.
 # No environment variable, setting, header or request parameter reads or sets it.
 NG_PIPELINE_ENABLED = False
-LEAN_REFERENCE_ENABLED = False
+LEAN_REFERENCE_ENABLED = True
 
 
 def _ensure_exclusive_pipeline_switches(ng_enabled: bool, lean_reference_enabled: bool) -> None:
@@ -537,6 +537,7 @@ def _analyze(
         data_quality,
         horizon_context,
         skill_evidence=skill_evidence,
+        descriptive_reference=served_reference,
         # OOS arms must remain byte-identical to base: section-5A persists analysis_hash.
         include_blocking_reasons=arm_context is None,
     )

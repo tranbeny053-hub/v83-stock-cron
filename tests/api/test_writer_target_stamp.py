@@ -162,6 +162,7 @@ def _unstamped(row: dict) -> dict:
     return {key: value for key, value in row.items() if key not in STAMP_KEYS}
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 @pytest.mark.parametrize("origin", ["USER_REQUESTED", "CONTROLLED_SMOKE"])
 def test_a_live_row_is_stamped_from_the_frozen_clock(monkeypatch, stamp_spy, origin) -> None:
     clock = _Clock(CORE_DONE, ISSUED)
@@ -215,6 +216,7 @@ def test_a_coherent_cross_provider_row_records_the_snapshot_venue(monkeypatch) -
     assert tc.resolution_venue(row) == "OKX_PUBLIC"
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_core_is_read_after_the_quant_core_and_issue_after_both_snapshots(monkeypatch) -> None:
     clock = _Clock(CORE_DONE, ISSUED)
     _setup(monkeypatch, clock)
@@ -263,6 +265,7 @@ def test_core_is_read_after_the_quant_core_and_issue_after_both_snapshots(monkey
     assert row["issued_at_utc"] == _iso(ISSUED)
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_the_response_and_snapshots_are_identical_whether_or_not_stamped(monkeypatch) -> None:
     _setup(monkeypatch, _Clock(CORE_DONE, ISSUED))
     stamped_payload, stamped_row, stamped_features, stamped_derivatives = _analyze()
@@ -284,6 +287,7 @@ def test_the_response_and_snapshots_are_identical_whether_or_not_stamped(monkeyp
     assert not STAMP_KEYS & _keys_anywhere(stamped_derivatives)
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_the_stamped_row_is_the_row_handed_to_the_repository(monkeypatch) -> None:
     _setup(monkeypatch, _Clock(CORE_DONE, ISSUED))
     saved: list[dict] = []
@@ -401,6 +405,7 @@ def test_oos_arm_rows_are_never_stamped(monkeypatch, stamp_spy) -> None:
         pytest.param((CORE_DONE, ISSUED), {}, "1M", id="I9_monthly_timeframe"),
     ],
 )
+@pytest.mark.usefixtures("lean_reference_off")
 def test_a_row_that_fails_validate_v1_stays_unstamped(
     monkeypatch, stamp_spy, clock, selection, timeframe
 ) -> None:

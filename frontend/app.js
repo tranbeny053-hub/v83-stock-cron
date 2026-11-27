@@ -964,15 +964,18 @@ function overviewCard(payload) {
   const view = decisionViewOf(payload);
   const timeframe = payload.timeframes?.primary || "n/a";
   const heatBand = getScoreHeatBand(display.total_score);
+  const servedReference = payload.decision_brief?.probability_type === "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY";
   node.classList.add("timeframe-card");
-  node.classList.add(heatBand.className);
+  if (!servedReference) node.classList.add(heatBand.className);
   node.dataset.timeframeCard = timeframe;
   if (payload.run_id) {
     // Whose card this is, so its save receipt reaches its own Storage row.
     node.dataset.runId = payload.run_id;
   }
-  node.style.setProperty("--heat-main", heatBand.mainColor);
-  node.style.setProperty("--heat-border", heatBand.mainColor);
+  if (!servedReference) {
+    node.style.setProperty("--heat-main", heatBand.mainColor);
+    node.style.setProperty("--heat-border", heatBand.mainColor);
+  }
   node.querySelector("h2").textContent = `${payload.normalized_symbol} · ${
     display.horizon_approx_label || timeframe
   }`;
@@ -981,11 +984,10 @@ function overviewCard(payload) {
   demoBanner.textContent = view ? decisionDataBanner(view.data) : dataBannerText(display);
   node.insertBefore(demoBanner, node.querySelector("dl"));
   const referenceBrief = payload.decision_brief;
-  if (referenceBrief?.probability_type === "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY") {
+  if (servedReference && backendText(referenceBrief.uncalibrated_banner)) {
     const referenceLabel = document.createElement("p");
     referenceLabel.className = "model-readiness";
-    referenceLabel.textContent = referenceBrief.uncalibrated_banner ||
-      referenceBrief.model_readiness_label;
+    referenceLabel.textContent = referenceBrief.uncalibrated_banner;
     if (referenceLabel.textContent) {
       node.insertBefore(referenceLabel, node.querySelector("dl"));
     }
@@ -1007,7 +1009,6 @@ function overviewCard(payload) {
   }
   const heatRow = ["Signal heat (not risk)", heatBand.level];
   // The heat is a reading of the percentages: none is shown where the view assesses none.
-  const servedReference = payload.decision_brief?.probability_type === "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY";
   const viewHeat = notAssessedByView(payload) || servedReference ? [] : [heatRow];
   const values = view ? [...decisionViewRows(payload, view), ...viewHeat] : [
     [dispositionLabel(null), display.disposition],
@@ -1151,13 +1152,16 @@ function horizonCard(payload) {
   const role = timeframeRoleFor(payload, timeframe);
   const blocking = matrixBlockingItem(synthesis.actionability_stack);
   const heatBand = getScoreHeatBand(display.total_score);
+  const servedReference = payload.decision_brief?.probability_type === "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY";
 
   node.className = `result-card timeframe-card horizon-card ${
     role.tactical ? "tactical-horizon-card" : "regime-horizon-card"
   }`;
   node.dataset.timeframeCard = timeframe;
-  node.style.setProperty("--heat-main", heatBand.mainColor);
-  node.style.setProperty("--heat-border", heatBand.mainColor);
+  if (!servedReference) {
+    node.style.setProperty("--heat-main", heatBand.mainColor);
+    node.style.setProperty("--heat-border", heatBand.mainColor);
+  }
 
   if (blocking) {
     const blockBanner = document.createElement("div");
@@ -1198,6 +1202,13 @@ function horizonCard(payload) {
     const headline = textBlock("p", view.headline, "decision-headline");
     headline.dataset.decisionState = view.state;
     node.append(headline);
+    const referenceBrief = payload.decision_brief;
+    if (servedReference && backendText(referenceBrief?.uncalibrated_banner)) {
+      const referenceLabel = document.createElement("p");
+      referenceLabel.className = "model-readiness";
+      referenceLabel.textContent = referenceBrief.uncalibrated_banner;
+      node.append(referenceLabel);
+    }
     node.append(textBlock("p", view.detail, "decision-detail"));
     node.append(...gateFramingBlocks(gateViewOf(payload)));
     node.append(textBlock("p", role.plainEnglish, "matrix-role-description"));

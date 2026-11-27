@@ -70,8 +70,11 @@ ACCEPTANCE_BLOCKERS: tuple[str, ...] = (
     "BANNER: frontend/index.html's static banner says no timeframe's percentages are validated "
     "forecasts (the uncalibrated heuristic, or the descriptive reference on the named cells); its "
     "wording under an accepted claim is the owner's decision.",
-    "RELIABILITY_LABEL: frontend/app.js labels a row 'Why reliability is insufficient', which "
-    "contradicts an accepted claim once the backend reports measured reliability.",
+    "RELIABILITY_LABEL: src/crypto_probability_engine/detail/decision_synthesis.py builds the "
+    "#11 Calibration reliability actionability item and frontend/app.js renders it in "
+    "renderActionabilityRow (the row 'Why reliability is insufficient' that an earlier text named "
+    "is retired); under an accepted claim, that item must report measured reliability "
+    "consistently with the decision view.",
     "RENDER_TEST: tests/frontend/test_accepted_state_rendering.py does not pin today's whole "
     "render, compare permission renders, or catch advisory wording on permission surfaces.",
     "BACKEND_COPY: src/crypto_probability_engine/api/calibration_endpoint.py's item warning, the "
@@ -179,7 +182,10 @@ def build_decision_view(
         gate,
         liquidity=quant_result.get("liquidity_state"),
         state=state,
-        evidence_detail=evidence_gate_reason(gate, skill_evidence)[1],
+        evidence_detail=evidence_gate_reason(
+            gate, skill_evidence, descriptive_reference=is_reference
+        )[1],
+        descriptive_reference=is_reference,
     )
     if state == "NO_ACCEPTED_CLAIM" and gates["risk_gate_active"]:
         detail = NO_ACCEPTED_CLAIM_UNDER_A_RISK_GATE
@@ -346,8 +352,7 @@ def _limitations(state: str, hold: bool, is_reference: bool = False) -> list[str
         "Accepted forecast-quality claim for this model and timeframe."
         if accepted
         else (
-            "Descriptive historical frequency; not recorded for scoring and no "
-            "forecast-quality claim is made."
+            "Historical-frequency reference — descriptive estimate, not validated."
             if is_reference
             else "Uncalibrated heuristic: its accuracy has not been established on "
             "resolved outcomes."

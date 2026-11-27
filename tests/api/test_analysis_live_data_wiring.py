@@ -4,6 +4,7 @@ import json
 import time
 from dataclasses import replace
 
+import pytest
 from fastapi.testclient import TestClient
 
 from crypto_probability_engine.adapters.provider_selection import (
@@ -147,6 +148,7 @@ def test_live_selection_data_quality_reaches_response(monkeypatch) -> None:
     assert "binance" in payload["detail_view"]["market_data_v2_detail"]["provider_resources"]
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_live_analysis_schedules_immutable_prediction_row(monkeypatch) -> None:
     _run_background_synchronously(monkeypatch)
 
@@ -222,6 +224,7 @@ def test_live_analysis_schedules_immutable_prediction_row(monkeypatch) -> None:
     assert "feature_snapshot" not in payload
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_prediction_write_failure_does_not_break_live_analysis(monkeypatch) -> None:
     _run_background_synchronously(monkeypatch)
 
@@ -301,6 +304,7 @@ def test_missing_reference_anchor_skips_prediction_row() -> None:
     )
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_down_market_live_response_validates_with_signed_negative_fields(monkeypatch) -> None:
     def fake_select(symbol, timeframe, *, settings):
         return ProviderSelectionResult(

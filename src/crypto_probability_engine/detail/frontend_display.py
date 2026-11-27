@@ -196,11 +196,18 @@ def _skill_blocking_reason(skill_evidence: dict | None) -> tuple[str, str]:
     )
 
 
-def evidence_gate_reason(gate: Mapping[str, Any], skill_evidence: Any) -> tuple[str, str]:
+def evidence_gate_reason(
+    gate: Mapping[str, Any], skill_evidence: Any, *, descriptive_reference: bool = False
+) -> tuple[str, str]:
     """The headline and the sentence of the evidence gate's own reason, for the verdict at hand:
     the hold's while the directional evidence is under review, else the verdict's. Each is about
     the model, never about the market. A live analysis holds the verdict; a saved run does not."""
 
+    if descriptive_reference:
+        return (
+            "Evidence gate",
+            "Predictive performance has not been validated for this reference.",
+        )
     hold = gate.get("directional_evidence_hold")
     if isinstance(hold, Mapping) and hold.get("active"):
         return _DIRECTIONAL_EVIDENCE_HOLD_HEADLINE, _DIRECTIONAL_EVIDENCE_HOLD_DETAIL
@@ -208,13 +215,19 @@ def evidence_gate_reason(gate: Mapping[str, Any], skill_evidence: Any) -> tuple[
 
 
 def _blocking_reasons(
-    gate: dict, skill_evidence: dict | None, liquidity: Any
+    gate: dict,
+    skill_evidence: dict | None,
+    liquidity: Any,
+    *,
+    descriptive_reference: bool = False,
 ) -> list[dict[str, str]]:
     reasons = []
     for raw_code in gate.get("hard_blocks", []):
         code = str(raw_code)
         if code == "SKILL_NOT_DEMONSTRATED":
-            headline, detail = evidence_gate_reason(gate, skill_evidence)
+            headline, detail = evidence_gate_reason(
+                gate, skill_evidence, descriptive_reference=descriptive_reference
+            )
         else:
             headline, detail = blocking_reason(code, liquidity)
         reasons.append({"code": code, "headline": headline, "detail": detail})
@@ -230,6 +243,7 @@ def build_frontend_display(
     *,
     skill_evidence: dict | None = None,
     include_blocking_reasons: bool = True,
+    descriptive_reference: bool = False,
 ) -> dict:
     horizon = quant_result["probability_state"]["horizons"]["H_primary"]
     score = quant_result["score_stack"]
@@ -247,7 +261,10 @@ def build_frontend_display(
         "key_reasons": list(gate.get("hard_blocks", [])),
         "invalidation_conditions": list(gate.get("hard_blocks", [])),
         "blocking_reasons": _blocking_reasons(
-            gate, skill_evidence, quant_result.get("liquidity_state")
+            gate,
+            skill_evidence,
+            quant_result.get("liquidity_state"),
+            descriptive_reference=descriptive_reference,
         ),
         "data_quality_warnings": list(data_quality.get("warnings", [])),
         "execution_warnings": list(quant_result["execution_realism"].get("warnings", [])),

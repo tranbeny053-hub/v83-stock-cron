@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 
+import pytest
+
 from crypto_probability_engine.adapters.provider_selection import ProviderSelectionResult
 from crypto_probability_engine.api import analysis_service
 from crypto_probability_engine.api.schemas import AnalysisMode, AnalysisRequest
@@ -41,6 +43,7 @@ def _live_selection(symbol, timeframe, *, settings) -> ProviderSelectionResult:
     )
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_snapshot_attachment_does_not_change_response_identity_or_decisions(monkeypatch) -> None:
     monkeypatch.setattr(analysis_service, "select_market_data", _live_selection)
     monkeypatch.setattr(analysis_service, "uuid4", lambda: _FixedUuid())

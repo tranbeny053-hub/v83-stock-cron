@@ -187,7 +187,9 @@ def named_blocks(gate: Mapping[str, Any], liquidity: Any, among: Any) -> str:
     return _names([block for block in hard_blocks(gate) if block in among], liquidity)
 
 
-def hard_gate_summary(gate: Mapping[str, Any], liquidity: Any) -> str:
+def hard_gate_summary(
+    gate: Mapping[str, Any], liquidity: Any, *, descriptive_reference: bool = False
+) -> str:
     """One or two sentences naming each kind of hard gate that is active."""
 
     risk = _of_kind(gate, liquidity, "RISK")
@@ -200,10 +202,23 @@ def hard_gate_summary(gate: Mapping[str, Any], liquidity: Any) -> str:
         parts.append(f"A system or data gate is active: {_names(other, liquidity)}.")
     if _of_kind(gate, liquidity, "NOT_READABLE"):
         parts.append(LIQUIDITY_NOT_READABLE_SUMMARY)
+    evidence_copy = (
+        "Evidence gate: predictive performance has not been validated for this reference."
+        if descriptive_reference
+        else f"Evidence gate: {EVIDENCE_GATE_COPY}."
+    )
     if evidence and parts:
-        parts.append(f"The evidence gate is active too: {EVIDENCE_GATE_COPY}.")
+        parts.append(
+            evidence_copy
+            if descriptive_reference
+            else f"The evidence gate is active too: {EVIDENCE_GATE_COPY}."
+        )
     elif evidence:
-        parts.append(f"Evidence gate: {EVIDENCE_GATE_COPY}. No risk gate is active.")
+        parts.append(
+            f"{evidence_copy} No risk gate is active."
+            if descriptive_reference
+            else f"Evidence gate: {EVIDENCE_GATE_COPY}. No risk gate is active."
+        )
     if parts:
         return " ".join(parts)
     return UNNAMED_HARD_GATE if hard_gate_active(gate) else NO_HARD_GATE
@@ -227,6 +242,7 @@ def build_gate_view(
     liquidity: Any = None,
     state: str | None = None,
     evidence_detail: str | None = None,
+    descriptive_reference: bool = False,
 ) -> dict[str, Any]:
     """The gate framing of one analysis: a pure function of its gate result, the liquidity state
     its liquidity gate judged, the decision view's state where there is one, and the sentence
@@ -248,6 +264,8 @@ def build_gate_view(
             for block in blocks
         ],
         "risk_gate_active": risk_gate_active(gate, liquidity),
-        "summary": hard_gate_summary(gate, liquidity),
+        "summary": hard_gate_summary(
+            gate, liquidity, descriptive_reference=descriptive_reference
+        ),
         "framing": gate_framing(gate, liquidity, state),
     }

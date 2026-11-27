@@ -427,6 +427,7 @@ def test_t11_both_arms_have_zero_served_decision_influence(monkeypatch) -> None:
         analysis_service._pop_prediction_persistence(solo_baseline)  # noqa: SLF001
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_t12_ordinary_identity_and_response_payload_are_byte_identical(monkeypatch) -> None:
     snapshot = make_snapshot(provider="binance")
     monkeypatch.setattr(analysis_service, "select_market_data", _selection(snapshot))

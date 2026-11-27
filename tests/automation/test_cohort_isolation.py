@@ -108,6 +108,7 @@ def test_the_core_refuses_a_mixed_recorded_and_isolated_call(
         )
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_isolated_and_recorded_analyses_are_byte_identical_but_for_the_human_view(
     fixture_market, monkeypatch: pytest.MonkeyPatch
 ) -> None:

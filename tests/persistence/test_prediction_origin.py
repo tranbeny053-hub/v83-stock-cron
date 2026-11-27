@@ -119,6 +119,7 @@ def test_prediction_origin_contract_is_exact_and_rejects_invalid_values() -> Non
             validate_prediction_origin(invalid)
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_analyze_request_defaults_accepts_explicit_origin_and_preserves_identity(
     monkeypatch,
 ) -> None:

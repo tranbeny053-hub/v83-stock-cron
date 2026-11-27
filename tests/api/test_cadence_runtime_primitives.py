@@ -198,6 +198,7 @@ def _unavailable_derivatives_block(**kwargs):
     return block
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_default_identity_path_is_byte_stable_under_frozen_inputs(monkeypatch) -> None:
     monkeypatch.setattr(analysis_service, "uuid4", lambda: UUID(int=73))
 
@@ -272,6 +273,7 @@ def test_different_closed_candle_changes_cadence_identity(monkeypatch) -> None:
     _clear_pending(second)
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_deterministic_identity_changes_only_identifiers_and_hash(monkeypatch) -> None:
     monkeypatch.setattr(analysis_service, "uuid4", lambda: UUID(int=79))
     normal = _analyze(monkeypatch)
