@@ -1,102 +1,335 @@
 # STATE
 
-Updated: 2026-11-27 (**THE LEAN QUANT RELEASE IS THE PRODUCT FINISH LINE (OWNER P1-P10); ITS DORMANT
-BUILD IS ON MAIN (#372 → M105 6a8477ed), SWITCH OFF: LEAN_REFERENCE_ENABLED = False. PRODUCTION IS
-UNCHANGED: D 49ab0855 / UCPE-PROD-NG4P-20261118-B, OD-NG-4 KEEP_HOLD UNTIL A SEPARATE T4. THE
-RELEASE HOLDS ON THE P6 RIGHTS GATE (NOT ESTABLISHED), EXP-03 AND THE OWNER'S READ OF THE P5
-WORDING. THE PILOT WINDOW RUNS 2026-11-23T00:00:00Z – 2026-12-07T00:00:00Z; NO SPACE CHANGE INSIDE
-IT. NEVER RERUN THE DEPLOY OF 49ab0855, THE APPLY (44133908695), PREFLIGHT RUNS 43916685548,
-44012717250, 44039032076 OR 44113873249, THE EXP-04 VALIDATION OR THE EXP-05 STAGE-0 MAP. NO
-FORECAST-QUALITY CLAIM, INTERVAL CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE.**
-- The owner (verbatim below): 2026-11-26 (ICT), the resource-optimized Fable x Astra reconciliation
-  request and the final strategic rulings P1-P10 with the bounded LOCAL build authorization;
+Updated: 2026-11-27 (**THE LEAN REFERENCE IS ACTIVATED IN CODE ON MAIN (#374 → M107 8adf8877):
+LEAN_REFERENCE_ENABLED = True for the nine named cells. PRODUCTION IS UNCHANGED: D 49ab0855 /
+UCPE-PROD-NG4P-20261118-B keeps serving the heuristic (OD-NG-4 KEEP_HOLD in production) until a
+separately authorized release T4. P6 PRODUCTION RIGHTS ARE NOT ESTABLISHED. EXP-03 IS CONSUMED
+(PASS_OPERATIONAL; 9 of 9 cells SERVING_READY); NEVER RERUN IT. THE PILOT WINDOW RUNS
+2026-11-23T00:00:00Z – 2026-12-07T00:00:00Z; NO SPACE CHANGE INSIDE IT. NEVER RERUN THE DEPLOY OF
+49ab0855, THE APPLY (44133908695), PREFLIGHT RUNS 43916685548, 44012717250, 44039032076 OR
+44113873249, THE EXP-04 VALIDATION, THE EXP-05 STAGE-0 MAP OR EXP-03. NO FORECAST-QUALITY CLAIM,
+INTERVAL CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE.**
+- The owner (verbatim below): 2026-11-27 (ICT), the EXP-03 one-shot authorization, the EXP-03
+  acceptance with the step-8 activation authorization, and step 9 with history decision A;
   2026-11-27 (ICT), the T3 for this batch.
-- **THE CONSULTATION (T0, consumed).** Fable (claude-fable-5-2; XHIGH requested, numeric effort 80
-  reported, named level unconfirmed) recorded its position first
-  (.work/nga_strategy_20261126/FABLE_INITIAL_POSITION.md, sha256 cdf8e6f3…, sealed before Astra was
-  shown), then one cross-review (MATERIAL_DISAGREEMENT: YES). The existing gpt-6-astra High findings
-  were reused, not rerun; ONE targeted gpt-6-astra reply (Codex CLI, high, read-only, ephemeral,
-  ChatGPT login; thread 01a217f4-df17-7aa2-aaff-6e9ba969e716; 18,231 in / 511 out tokens) amended
-  all three disputed points; reconciled in .work/nga_strategy_20261126/RECONCILED_RECOMMENDATION.md
-  (sha256 167c8272…). Paid API $0.
-- **THE RULINGS (P1-P10).** P1 one bounded Lean Quant Release is the finish line, then stop model
-  development; P2 a new identity, pooled T/K, no prior or fitted constant; P3 reference-slot serving
-  for named cells only, KEEP_HOLD in production until activation; P4 nine named cells (BTC/USDT,
-  ETH/USDT, SOL/USDT x 15m, 1H, 4H; Binance Spot; six-bar horizon); P5 descriptive, not a
-  forecast-quality claim; P6 personal non-commercial use, rights gate retained; P7 request-time
-  serving is not a look, no new stored scoring; P8 C1 DEFER; P9 the advanced NGA research programme
-  NOT PURSUED for this release (reopenable, nothing deleted); P10 EXP-03 later.
-- **THE BUILD (#372 → M105 6a8477ed).** Contract
-  .work/lean_release_20261126/IMPLEMENTATION_CONTRACT.md (d1 2dd75e20…; d2 772fd927…, with LEAN-C1's
-  amendments). reference-pooled-tk-v1: p_timeout = T/K of six-bar terminal returns inside the
-  request-time cost band over a pooled 7-day (15m) or 28-day (1H, 4H) memory on the 3-bar lattice; a
-  full gap-free window makes K exactly 224, 224 or 56; UP = DOWN; no H_extended. Served only for
-  USER_REQUESTED default-method analyses of a named cell on Binance; every refusal falls back
-  explicitly to the heuristic with its reason; every other path, and everything with the switch off,
-  unchanged. A served reference writes no prediction, feature or derivatives row (nothing resolvable
-  or scored); its run row and its detail ARE saved, and the detail carries reference_state. The
-  brief, synthesis, views and UI carry the reference's own identity; reference_state is
-  schema-typed. 15m and 1H use one bounded Binance klines request (679 rows); 4H uses the snapshot.
-  Review: spec LEAN-C1 PASS_WITH_AMENDMENTS (folded as contract d2); code LEAN-R1 FAIL on one
-  blocker (the run summary carried a non-column key the REST writer would refuse), repaired; LEAN-R2
-  PASS_WITH_AMENDMENTS (its repair added one MAJOR, the UX card generator broken behind a test
-  patch, and three MINORs); LEAN-R3 PASS_WITH_AMENDMENTS (one new MAJOR: the served synthesis failed
-  the response schema); each repaired; LEAN-R4 PASS. The master's own repairs: S3's importlib
-  evasion of the import guard replaced by exact static imports and a dynamic-import guard; Codex's
-  protected-name skip in that guard reverted. Gate at the exact clean head e24efa59: 9571, scanners
-  3/3; mutation probes S1 6/6 killed and wiring W1-W9 8 killed, W4 equivalent (W8, W9 recorded in
-  probes_s3/result_w8_w9.json).
-- **THE RIGHTS GATE (P6): NOT ESTABLISHED** (.work/lean_release_20261126/P6_RIGHTS_REVIEW.md). The
-  live REST API falls under the Binance Terms of Use (cl. 27: "non-commercial personal or internal
-  business use"); the separate API terms (cl. 14.1.2(b)), the incorporated Prohibited Use and AI
-  Policies and the binding regional version could not be established from public text. The Binance
-  Vision archive terms do not apply (no archive). Release HOLD.
-- **EXP-03** (.work/lean_release_20261126/EXP03_REHEARSAL_PACKAGE.md): one local, in-memory,
-  operational rehearsal over the nine cells (at most 48 klines requests); prepared, NOT authorized.
-- **DISCLOSURES.** Fable's filtered STATE reads included the public §5A result summary line (the
-  filter is case-sensitive); no protected path was opened. Codex's read-only audit (task-1093)
-  reported one broad search with a case-sensitive exclusion that may have scanned two public docs/
-  files whose names carry the §5A token (a preregistration and an acceptance matrix); no content
-  entered the audit and the master did not open the log. Later tasks carried case-insensitive
-  per-component exclusions.
+- **EXP-03, CONSUMED** (.work/lean_release_20261126/exp03_run/EXP03_REPORT.md; raw sealed,
+  SHA256SUMS_RAW.txt). One local in-process rehearsal at M106 with the switch set True in a detached
+  worktree only (restored and verified), 2026-11-27T13:11:39Z–13:14:50Z: 36 analyses, 84 HTTP GETs
+  to data-api.binance.vision, 21 klines (9 ordinary, 12 reference-history at limit 679), in-memory
+  persistence. PASS_OPERATIONAL; all 18 switch-ON analyses SERVED, so 9 of 9 cells SERVING_READY
+  cold and warm. P6 was accepted by the owner for that rehearsal only. Limitations, as the owner
+  recorded them: all 36 exchangeInfo requests failed in both arms (the report shows each timed out
+  after ~2–2.8 s); this is not a reference-specific regression; PROVIDER_DEGRADED and TO_VERIFY are
+  preserved (a maintenance item, not changed here); the shared-cache execution is not an independent
+  cold-cache benchmark; no accuracy, calibration or directional-skill claim. Accepted by the owner:
+  all nine cells, the measured latency, requests and sizes.
+- **THE ACTIVATION (#374 → M107 8adf8877).** LEAN_REFERENCE_ENABLED = True; nine cells unchanged. A
+  served reference shows: the card label "Historical-frequency reference · Descriptive estimate —
+  not validated." on overview and matrix cards; "Calibration reliability: Not applicable to this
+  descriptive reference."; the evidence gate "predictive performance has not been validated for this
+  reference" (gate tokens, actions, dispositions and gate_result unchanged); "Symmetric by design —
+  no directional signal."; no heat colour. Heuristic, isolated/automation (UOR), OOS, cadence and
+  smoke paths unchanged; a USER_REQUESTED named-cell analysis now differs from the isolated
+  automation analysis of the same snapshot (UOR keeps the heuristic). RELIABILITY_LABEL's blocker
+  text names today's real surfaces. Tests run the shipped default; 25 legacy-path tests (8 modules)
+  opt out by name; test_ng_dormant_switch, fullscreen_goldens and test_accepted_state_rendering
+  switch it off in setup (no whole-screen golden of a served reference). The CHANGELOG entry for
+  #368–#370 and #372 rides in the same PR. Review: LEAN-A1 FAIL on one blocker (served references
+  never listed in Recent Analysis while the receipt said saved there), resolved by the owner's
+  option A in step 9; LEAN-A2 PASS_WITH_AMENDMENTS (two minors folded); LEAN-A3 PASS. The master's
+  own corrections: Codex's global test-wide switch-off replaced by a named per-test opt-out (25
+  legacy-path tests after step 9; every other test runs the shipped default); a false
+  RELIABILITY_LABEL claim corrected; the matrix-card label, the gate summary and the saved evidence
+  entry fixed after the master's browser checks; Detail never makes a saving claim. Gate at the
+  exact clean head 8437d447: 9583, scanners 3/3; probes A1-A4 and H1-H7 killed (H5 first survived, a
+  test was added; two invalid H5 re-probes were discarded).
+- **HISTORY (owner decision A, step 9).** A served reference writes no prediction row, and the
+  durable history readers (persistence/repository.py, evaluator-pinned, unchanged) list only
+  ledgered runs. So /v1/runs merges held USER_REQUESTED served-reference runs from session memory
+  into the durable list (no duplicates, newest first, capped at the history limit, no other origin;
+  rows marked DURABLE or SESSION_MEMORY). Such a run is reopenable while held and is NOT listed
+  after eviction or restart, although its run and detail rows are stored when the store is
+  configured. A SAVED receipt for it reads "Saved as an analysis run. Available in Recent Analysis
+  while retained in the app's current session memory; it may disappear after eviction or restart,
+  and it is not recorded for forecast evaluation."; Detail shows only a retention line with no
+  saving claim; FAILED stays "not confirmed". Durable reference history is deferred (optional
+  maintenance).
+- **DISCLOSURES (activation).** The reference's evidence-gate sentence omits the H2 hold text; the
+  hold still applies and the Evidence row shows it. For the nine cells, the user's recorded analysis
+  serves the reference while the isolated automation path (UOR radar evidence) stays the heuristic;
+  hard_blocks and hard_gate_passed are equal. A UOR relay is drafted
+  (.work/lean_release_20261126/UOR_RELAY_DRAFT_LEAN.md), NOT delivered.
+- **BROWSER EVIDENCE** (.work/lean_release_20261126/activation_ui/, MOCK fixtures through the real
+  app, no network, no credentials): the served cards carry the label, no heat class or colour and
+  the reference gate wording; the heuristic cards are unchanged; the Detail shows the reference
+  block, #11 not applicable and the symmetric sentence. STEP9_BROWSER_CHECK.json (a healthy
+  in-memory store): Recent Analysis lists 3 SESSION_MEMORY and 3 DURABLE rows; a reopened reference
+  shows the retention line and no saving claim; SAVED receipts show history_line on the served cells
+  and the generic text on the others. The EXP-03 replay screenshots
+  (.work/lean_release_20261126/exp03_run/browser/) show the pre-fix state.
+- **THE RIGHTS GATE (P6): production NOT ESTABLISHED**
+  (.work/lean_release_20261126/P6_RIGHTS_REVIEW.md and P6_RIGHTS_REVIEW_ADDENDUM_1.md). The owner's
+  rehearsal-only acceptance does not extend to production.
 - **THE PILOT WINDOW, passively** (.work/ng4_window_20261123/obs/): the Space RUNNING at D with 1 of
-  1 replicas at the readings through 2026-11-27T04:33Z (sha and lastModified 2026-11-18T14:16:24Z
-  unchanged); every scheduled keepalive, resolver and guard run listed green (the last 40 of each);
-  the EXP-09 route 0 runs. A same-sha restart is not visible passively.
+  1 replicas at the readings through 2026-11-27T16:40Z (sha and lastModified 2026-11-18T14:16:24Z
+  unchanged; no deploy after the merge); every scheduled keepalive, resolver and guard run listed
+  green (the last 40 of each); the EXP-09 route 0 runs. A same-sha restart is not visible passively.
 - **UOR HOLD #4** still stands: the local main checkout stays at
   0118cfaace93d911bef88cf2bdf5a0fd31dc39e0.
 - **THE REVIEW.** One independent reviewer: session local_6aa4983c… (claude-opus-5-5, xhigh,
-  read-only), whose reviews of this batch are LEAN-C1 (the contract), LEAN-R1, LEAN-R2, LEAN-R3 and
-  LEAN-R4 (the build); LEAN-R4's NOTEs (assert which path ran in the whole-response test; one
-  validator per response) and LEAN-R2's NOTE (the card's heat colour still applies on a served
-  reference) are recorded, not folded. This record: LEAN-S1 on draft r1 (PASS_WITH_AMENDMENTS;
-  folded into r2), LEAN-S2 on r2 (PASS_WITH_AMENDMENTS; its two amendments folded into r3, exact
-  delta exact_delta_r2_vs_r3.txt), then ONE exact-delta check of the execution-time values against
-  r3 (X: PASS).
-- Process: Codex delegations 10 (task-1093 the serving-path audit; task-1094 S1; task-1095 S2;
-  task-1096 and task-1098 S3; task-1097 S4, two runs, the first NEEDS_DECISION with no change;
-  task-1099, task-1100 and task-1101 the review repairs), each re-gated and its actual diff read by
-  the master; one subagent (Fable); one targeted gpt-6-astra reply (owner-authorized, subscription,
-  $0); paid API $0. Models: the master claude-opus-5-5 (the owner's directive names High; a session
+  read-only), whose reviews of this batch are LEAN-A1, LEAN-A2 and LEAN-A3 (the activation and step
+  9). Recorded NOTEs, not folded: the history merge sorts ISO timestamp strings (correct for UTC
+  strings); the Recent Analysis list shows no retention marker (the receipt and Detail carry it).
+  This record: LEAN-S3 on draft r1 (PASS_WITH_AMENDMENTS; its eight items folded into r2, exact
+  delta exact_delta_act_r1_vs_r2.txt); LEAN-S4 read-back of r2 (PASS_WITH_AMENDMENTS; its one item,
+  this sentence, folded into r3, exact delta exact_delta_act_r2_vs_r3.txt); then ONE exact-delta
+  check of the execution-time values against r3 (X: PASS).
+- Process: Codex delegations 4 (task-1102 the activation change; task-1103 the targeted repair from
+  the master's browser check; task-1104 step 9, history option A; task-1105 the no-saved-claim
+  Detail fix), each re-gated and its actual diff read by the master; GPT sidecar consultations 0;
+  paid API $0. Models: the master claude-opus-5-5 (the owner's directive names High; a session
   cannot see its own effort level); the reviewer claude-opus-5-5 at xhigh as set for its session.
+  Budget: steps 8 and 9 of 9; step 9 is the final authorized substantive step.
 - Nothing else changed: no dispatch, no production database read or write, no credential handling,
-  no Space setting or secret change, no push to hf, no live market request, no real data, no
-  protected look, no F3 or §5A access, no rerun. OD-NG-2 DEFER, OD-NG-4 KEEP_HOLD (production), H2
-  and NO_TRADE, the hard gates and the four acceptance blockers are unchanged.
-- CARRIED OVER, still open: passive checks through the window; the EXP-09 read (owner one-shot, not
-  before 2026-12-07T00:10Z) and the disable (owner T4) batched with the writer token's renewal
-  (before 2026-12-18T09:27Z); the day-7 checkpoint (2026-11-30T00:00Z, no action); the CHANGELOG
-  entries for #368, #369, #370 and #372 (a new T3); the release blockers (the P6 rights fact;
-  EXP-03; the owner's read of the P5 wording, with the stale RELIABILITY_LABEL text reconciled in
-  the activation change; the activation T3/T4); the release of UOR HOLD #4; cleanup candidates.
-  Carried, not release dependencies: the pre-existing unqualified-function follow-up; OD-NG-1,
-  OD-NG-3, OD-NG-4b, OD-NG-7; NG6-R1, R2, R3, R5; the licensing inquiry's sending (not authorized:
-  P6 allows no third-party contact); and every other item M104's record carries. NOT PURSUED for
-  this release (P9), reopenable, nothing deleted: C-2's remaining inputs to C-7, D2-D8, Q1/Q3,
-  EXP-04 stage 2 and its redesign, EXP-05 stage 1, EXP-06/07/08/10-13, Option B, H2-B1 and lattice
-  expansion; the EXP-04 and EXP-05 holds stay.
-- This record is the batch's last publish. Before it: #372.)
+  no Space setting or secret change, no push to hf, no deploy, no new live market request after
+  EXP-03, no protected look, no F3 or §5A access, no rerun. OD-NG-2 DEFER, OD-NG-4 KEEP_HOLD in
+  production, H2 and NO_TRADE, the hard gates and the four acceptance blockers are unchanged.
+- CARRIED OVER, still open: the release prerequisites (the P6 production-rights confirmation; the
+  release T4 after 2026-12-07 through scripts/release.py, which re-pins the deploy delta and asset
+  tokens; the post-release browser check and STATE close-out); passive checks through the window;
+  the EXP-09 read (owner one-shot, not before 2026-12-07T00:10Z) and the disable (owner T4) batched
+  with the writer token's renewal (before 2026-12-18T09:27Z); the day-7 checkpoint
+  (2026-11-30T00:00Z, no action); the UOR relay delivery (drafted,
+  .work/lean_release_20261126/UOR_RELAY_DRAFT_LEAN.md; not authorized); maintenance items: the
+  exchangeInfo timeout and durable reference history (optional); the release of UOR HOLD #4; cleanup
+  candidates; and every other item M106's record carries.
+- This record is the batch's last publish. Before it: #374.)
 **Production is D 49ab0855 / UCPE-PROD-NG4P-20261118-B (R ab2fe87f); rollback target 27edbcad.**
+- **The owner (2026-11-27, ICT), verbatim — the T3 for this batch**
+  (from .work/p7/redesign/handoff/owner_t3_lean_activation.txt, sha256 c0787a47…):
+```text
+CONTINUE CURRENT — Opus High.
+OWNER T3 AUTHORIZE — FINAL LEAN ACTIVATION BATCH.
+Authorize the exact sealed package:
+.work/lean_release_20261126/T3_PACKAGE_LEAN_ACTIVATION.md
+Package SHA256:
+bc8ea20172b533be02e194b242854e344f77b6340350d3052616f21d1251c0a4
+SHA256SUMS_ACTIVATION_PACKAGE.txt digest:
+75e6e8eb75dff0dbede33b11e3ce87bef7e14f7b04e248b3bf481c208c4cedda
+Base M106:
+f996acdc6c47203e3d83e52b7f7ac9141074a771
+Authorized branch:
+feat/lean-activation
+Exact head:
+8437d447d1ff2470b212fb09d9c65becf5ce922d
+Predicted merge tree:
+8b468fa60cfefb415a2a295957f60bbd908eccb2
+GPT independently verified all 26 package checksums, the exact head and tree, clean worktree, live GitHub main, zero open PRs, exact-head VERIFY=PASS with 9,583 tests and scanners 3/3, LEAN-A3 PASS and the STATE review records.
+GPT also verified the current public Space metadata: D 49ab0855, RUNNING, 1/1 replicas.
+One documentation correction: the activation branch contains six commits, not seven. The listed commits, exact head and tree are correct. Declare this correction in the execution record and STATE delta where applicable. Do not alter the sealed implementation or create an unnecessary corrective commit.
+EXECUTE:
+
+1. Reconfirm preflight conditions, exact refs, checksums, mandatory gates and the absence of automatic deployment from the publication path.
+2. Publish the exact activation branch without modification.
+3. Require all green mandatory PR checks at the authorized head.
+4. Merge with --merge --match-head-commit and verify exact parents and predicted tree.
+5. Require successful post-merge CI and reproducible build.
+6. Regenerate STATE-last from reviewed draft r3 on the final main, including the owner T3 verbatim and exact execution facts.
+7. Complete the required exact-delta check, full gate, STATE publication and merge verification.
+
+HOLD on drift or any failed mandatory check.
+CRITICAL RELEASE GUARD:
+After this merge, main carries LEAN_REFERENCE_ENABLED = True.
+Any deployment of this activated tree constitutes the Lean production release.
+No deployment from main is authorized now. P6 production clearance remains NOT ESTABLISHED, and separate owner T4 authorization is mandatory.
+If the pilot disable requires a deployment before Lean release clearance, it must use a separately reviewed and authorized switch-OFF tree.
+Preserve production D 49ab0855 and OD-NG-4 KEEP_HOLD.
+AFTER T3:
+Prepare only the minimal final-release execution checklist using existing records. No new development step, research programme, implementation, speculative tooling or additional model consultation.
+The nine-step development budget is exhausted.
+Keep the UOR relay drafted and NOT DELIVERED. Preserve UOR HOLD #4.
+No hf push, deploy, manual workflow dispatch, production database access, credential action, Space change, relay delivery or EXP-09 execution.
+No EXP-09 before 2026-12-07T00:10Z.
+Return with the verified final main, execution evidence and remaining owner release prerequisites.
+Development is complete. The remaining objective is safe publication, production release and project close-out.
+```
+- **The owner (2026-11-27, ICT), verbatim — EXP-03 accepted; the activation (step 8)**
+  (from .work/p7/redesign/handoff/owner_activation_authorization_20261127.txt, sha256 97446684…):
+```text
+CONTINUE CURRENT — Opus High.
+OWNER EXP-03 ACCEPTANCE AND FINAL LOCAL ACTIVATION BUILD AUTHORIZATION — STEP 8 OF 9.
+GPT independently inspected the EXP-03 report, raw operational index, HTTP request records, persistence results, consumed marker, restored worktree and evidence checksums.
+ACCEPT:
+
+* All nine named cells remain in scope. No narrowing.
+* All 18 switch-ON analyses returned SERVED.
+* Accept the measured latency, request consumption, response size and detail size for this personal-use product.
+* Preserve EXP-03 as consumed. Never rerun it.
+* Accept the observed serving readiness subject to closing the recorded UI findings and preserving the exact operational limitations.
+
+RECORD THE LIMITATIONS:
+
+* All 36 exchangeInfo requests failed in both arms.
+* This is not a reference-specific regression. Preserve PROVIDER_DEGRADED, TO_VERIFY and all applicable guards.
+* The shared-cache execution is not an independent cold-cache benchmark. Do not overstate the latency comparison.
+* The browser findings remain open until the activation change is verified.
+* Do not claim predictive accuracy, calibration improvement or directional skill.
+
+AUTHORIZE ONE CONSOLIDATED LOCAL T2 ACTIVATION CHANGE:
+
+1. Set LEAN_REFERENCE_ENABLED = True on the isolated local development branch only.
+2. Keep all nine named cells.
+3. Fix the missing reference card label on normal decision-view cards.
+4. Replace inherited heuristic calibration-reliability wording on served references with an explicit not-applicable state.
+5. Correct the evidence-gate wording to state that predictive performance has not been validated for this descriptive reference.
+6. Make the absence of directional information explicit: symmetry by design, not measured directional skill.
+7. Disable heuristic heat colour on served-reference cards.
+8. Add explicit SERVED/UNAVAILABLE path assertions to the whole-response tests.
+9. Reconcile the stale RELIABILITY_LABEL blocker text.
+
+Preferred user-facing copy:
+
+* Historical-frequency reference.
+* Descriptive estimate — not validated.
+* Calibration reliability: Not applicable to this descriptive reference.
+* Predictive performance has not been validated for this reference.
+* Symmetric by design — no directional signal.
+
+Keep the UI concise and consistent with the existing design. Backend JSON remains authoritative.
+Preserve hard-gate outcomes, H2, NO_TRADE, schema validity, persistence isolation, analysis hashes, eligible fallback and UOR compatibility.
+Verify all corrected UI paths using existing MOCK fixtures or local replay of already captured admissible EXP-03 responses. No new live market-data requests or rehearsal.
+Perform actual-diff review, targeted regression tests, full verification, scanners 3/3 and the mandatory independent review. Check relevant mutations where required.
+Do not change exchangeInfo, provider architecture, caching, request policy or timeout settings in this activation step. Record the existing issue as a maintenance item unless it constitutes a genuine mandatory release blocker.
+P6:
+Production rights remain NOT ESTABLISHED. The rehearsal-specific acceptance does not extend to production.
+No production release is authorized by this message.
+PUBLICATION PREPARATION:
+Prepare one consolidated local T3 package containing:
+
+* The carried CHANGELOG entries for #368–#370 and #372.
+* The final reviewed activation change.
+* STATE-last.
+* Exact heads, predicted trees, verification evidence and package checksums.
+* Final reviewed browser evidence.
+
+Keep the remaining work within the nine-step budget.
+No additional Fable/Astra consultation, new model research, advanced experiments, speculative infrastructure or unrelated repairs.
+PROTECT:
+UOR HOLD #4, current production OD-NG-4 KEEP_HOLD, all protected evidence and consumed experiments remain binding.
+No push, deploy, production activation, workflow dispatch, database access, credential action, hf push or Space change.
+No EXP-09 before 2026-12-07T00:10Z.
+Return with the completed activation package, actual corrected UI evidence, exact review verdicts and the final consolidated release prerequisites.
+Do not initiate another development phase. This is the final planned substantive implementation milestone of the Lean Release.
+```
+- **The owner (2026-11-27, ICT), verbatim — step 9, history decision A**
+  (from .work/p7/redesign/handoff/owner_step9_history_a_20261127.txt, sha256 30cd26ee…):
+```text
+CONTINUE CURRENT — Opus High.
+OWNER HISTORY DECISION = A.
+Authorize step 9 of 9: the final consolidated LOCAL repair on feat/lean-activation, based on exact head 5ea6feda23d2309010cf1a4aa7cae0c7dd6b191d.
+GPT independently inspected DECISION_HISTORY_VISIBILITY.md, REVIEW_LEAN_A1.md, the Recent Analysis API and all three repository history readers.
+Accept Option A as the resource-optimal release solution. Durable reference-history retrieval is deferred as an optional future maintenance improvement, not a release dependency.
+IMPLEMENT:
+
+1. Restore Recent Analysis visibility and reopening for served USER_REQUESTED reference runs while they remain in process memory.
+2. Preserve durable heuristic history. Merge eligible in-process reference runs without duplicates, incorrect ordering, exceeding the existing history limit or exposing another origin.
+3. Make the save receipt and saved Detail wording truthful.
+
+Preferred wording:
+"Saved as an analysis run. Available in Recent Analysis while retained in the app's current session memory."
+Explain that reference history may disappear after eviction or restart and is not recorded for forecast evaluation.
+Do not guarantee availability until restart if earlier eviction is possible. Distinguish durable storage, current history visibility and prediction-ledger recording.
+Do not describe a failed durable save as successful.
+
+4. Fold LEAN-A1 findings 2, 3, 5, 6 and 7 exactly as recorded in DECISION_HISTORY_VISIBILITY.md.
+5. Remove the inappropriate restart-test opt-out and add a served-reference variant that verifies the chosen lifecycle behaviour.
+6. Verify healthy and failed REST save receipts, mixed durable/in-process history, deduplication, ordering, limits, origin isolation, reopening and restart/eviction behaviour.
+7. Preserve the explicit named-cell cohort divergence: recorded user analysis serves the reference, isolated UOR/radar evidence stays heuristic, and hard_blocks and hard_gate_passed remain consistent.
+
+Disclose this distinction in the final release records and prepare the appropriate UOR relay text. No relay delivery is authorized now.
+PROTECT:
+Do not modify persistence/repository.py or any evaluator-pinned file.
+No evaluator re-pin, prediction-ledger placeholder, database migration, scoring change, protected evidence access or research reopening.
+Preserve the reference mathematics, all nine cells, NO_TRADE, H2, hard gates, UOR HOLD #4, schema correctness and persistence isolation.
+VERIFICATION:
+One consolidated causal repair.
+Use targeted tests, actual-diff review, required mutation probes, full verification at the exact clean committed head, scanners 3/3 and one focused independent delta review.
+Re-check the browser with MOCK data, including Recent Analysis visibility, reopening, reference labels and save-receipt wording.
+Do not rerun EXP-03 or make new live market-data requests.
+Preserve all previously accepted EXP-03 evidence and limitations.
+Prepare the consolidated T3 package containing the carried CHANGELOG, the activation change with its final repair, and STATE-last.
+Record exact heads, trees, gates, review verdicts and checksums.
+RESOURCE STOP:
+This is step 9, the final authorized substantive development step.
+Do not expand into durable history redesign, provider optimization, additional quant research or unrelated improvements.
+If a mandatory blocker remains after the bounded repair and review, return HOLD with the exact cause. Do not silently exceed the budget.
+P6 production clearance remains NOT ESTABLISHED.
+No push, deploy, production activation, database access, credential action, workflow dispatch, hf push or Space change.
+No EXP-09 before 2026-12-07T00:10Z.
+Return with the final reviewed activation package and release prerequisites. No new development phase.
+```
+- **The owner (2026-11-27, ICT), verbatim — the EXP-03 one-shot authorization**
+  (from .work/p7/redesign/handoff/owner_exp03_authorization_20261127.txt, sha256 74c042d3…):
+```text
+CONTINUE CURRENT — Opus High.
+OWNER EXP-03 ONE-SHOT AUTHORIZATION — LEAN QUANT RELEASE.
+GPT independently verified:
+
+* Main M106: f996acdc6c47203e3d83e52b7f7ac9141074a771.
+* Zero open PRs.
+* CI 45944629247 and reproducible build 45944629223: SUCCESS, first attempt.
+* All 20 T3 execution checksums: PASS.
+* EXP-03 d2 and the consolidated release checklist.
+
+Authorize exactly one local EXP-03 rehearsal under:
+.work/lean_release_20261126/EXP03_REHEARSAL_PACKAGE.d2.md
+SHA256:
+fd3435e5044d128769b21fd7f9ddcd7cae0c60a02189a6b168ca66c9d1349ccd
+P6 — REHEARSAL-SPECIFIC ACCEPTANCE:
+The owner confirms exclusive personal, non-commercial use.
+Official Binance sources support programmatic public market-data access and analytics:
+https://www.binance.com/vi/terms
+https://developers.binance.com/en/docs/introduction
+https://developers.binance.com/en/docs/products/spot/rest-api
+The Vietnamese public terms dated 2025-05-06 distinguish automated retrieval of information through unintended means from information intentionally provided through Binance services.
+The owner accepts the remaining uncertainty for this bounded local rehearsal only, provided no known applicable restriction prohibits it.
+This is not a representation that all regional terms, Product Terms, API terms or production derived-output rights have been established.
+P6 production clearance remains NOT ESTABLISHED.
+EXECUTION:
+
+* One local rehearsal at verified M106.
+* Explicitly authorize execution before the NG4 pilot closes because this rehearsal is operationally isolated from production.
+* Nine existing named cells only.
+* Exactly the d2 run contract.
+* 36 analyses; maximum 48 klines requests, including 12 reference-history requests.
+* Existing documented public GET endpoints only.
+* Respect pacing, rate limits and access restrictions.
+* In-memory persistence only.
+* Isolated local worktree and temporary switch activation only.
+* Raw capture before interpretation, with checksums.
+* No scientific scoring, outcome evaluation, fitting or accuracy claim.
+* Stop on the first unexpected failure; preserve all evidence.
+* No automatic retry, no second rehearsal.
+
+REPORT:
+
+1. PASS_OPERATIONAL or FAIL.
+2. SERVING_READY status for each of the nine cells, separately for cold and warm.
+3. Actual request counts, measured latency and response/detail sizes.
+4. Persistence verification and exact methodology/fallback behavior.
+5. Browser evidence of the actual served reference, including banner, card label and Detail block.
+6. Any remaining mandatory release blockers.
+
+Do not interpret an all-UNAVAILABLE result as product readiness.
+Restore the temporary local switch and verify the rehearsal worktree after completion.
+Do not begin the activation change until the owner has reviewed the rehearsal measurements, serving-ready scope and wording.
+Keep the remaining work within the existing nine-step budget. No new model research, additional consultation, speculative tooling or unrelated changes.
+PROTECT:
+No production access, database access, credentials, Space change, deployment, hf push, GitHub push, manual workflow dispatch or production activation.
+No EXP-09 before 2026-12-07T00:10Z.
+Preserve UOR HOLD #4, OD-NG-4 KEEP_HOLD, H2, NO_TRADE, protected evidence and every consumed experiment.
+Return with the completed one-shot rehearsal evidence and one concise activation recommendation.
+```
 - **The owner (2026-11-27, ICT), verbatim — the T3 for this batch**
   (from .work/p7/redesign/handoff/owner_t3_lean_release.txt, sha256 559aa6bc…):
 ```text
@@ -4135,7 +4368,14 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=THE LEAN QUANT RELEASE IS THE FINISH LINE (owner P1-P10); its dormant build is on main
+LOOP_STATE=THE LEAN REFERENCE IS ACTIVATED IN CODE on main M107 8adf8877 (owner step 8 of 9); EXP-03
+  CONSUMED (PASS_OPERATIONAL, 9 of 9 SERVING_READY); production is unchanged: D 49ab0855 /
+  UCPE-PROD-NG4P-20261118-B (OD-NG-4 KEEP_HOLD in production) until the release T4; P6 production
+  rights NOT ESTABLISHED. The pilot window runs passively (Space RUNNING at D, every scheduled run
+  listed green, EXP-09 0 runs). Its previous head is kept verbatim below (M106 f996acdc). Main is
+  M107 8adf8877 before this record; local main is held at 0118cfaa (UOR HOLD #4). The previous head,
+  below, stands except its last sentence (main before that record).
+  THE LEAN QUANT RELEASE IS THE FINISH LINE (owner P1-P10); its dormant build is on main
   M105 6a8477ed with LEAN_REFERENCE_ENABLED = False; production is unchanged: D 49ab0855 /
   UCPE-PROD-NG4P-20261118-B (OD-NG-4 KEEP_HOLD). The release holds on P6 (rights NOT ESTABLISHED)
   and EXP-03. The pilot window runs passively (Space RUNNING at D, every scheduled run listed green,
@@ -7249,7 +7489,13 @@ LOOP_STATE=THE LEAN QUANT RELEASE IS THE FINISH LINE (owner P1-P10); its dormant
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=THE LEAN QUANT RELEASE (owner P1-P10, 2026-11-27): THE DORMANT BUILD IS ON MAIN;
+CURRENT_MILESTONE=THE LEAN QUANT RELEASE: ACTIVATED IN CODE ON MAIN (2026-11-27), NOT RELEASED; THE
+  NG4 PILOT WINDOW IS OPEN (2026-11-23T00:00Z – 2026-12-07T00:00Z); THE ADVANCED NGA RESEARCH
+  PROGRAMME IS NOT PURSUED FOR THIS RELEASE (P9):
+  - next: the P6 production-rights confirmation, then the release T4 after 2026-12-07 (batched with
+    the EXP-09 read, the disable and the token renewal if the owner wishes), then the browser check
+    and close-out.
+  Before it: THE LEAN QUANT RELEASE (owner P1-P10, 2026-11-27): THE DORMANT BUILD IS ON MAIN;
   THE NG4 PILOT WINDOW IS OPEN (2026-11-23T00:00Z – 2026-12-07T00:00Z); THE ADVANCED NGA RESEARCH
   PROGRAMME IS NOT PURSUED FOR THIS RELEASE (P9):
   - next: the P6 rights fact, then the EXP-03 rehearsal (separate authorization) and the owner's
@@ -7848,7 +8094,10 @@ CURRENT_MILESTONE=THE LEAN QUANT RELEASE (owner P1-P10, 2026-11-27): THE DORMANT
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-lean-release (this record, on main M105 6a8477ed). This batch's other
+CURRENT_BRANCH=chore/state-lean-activation (this record, on main M107 8adf8877). This batch's other
+  branch: feat/lean-activation (#374). Merged branches and local worktrees are cleanup candidates;
+  no cleanup was authorized.
+  Before it: chore/state-lean-release (this record, on main M105 6a8477ed). This batch's other
   branch: feat/lean-reference-release (#372). Merged branches and local worktrees are cleanup
   candidates; no cleanup was authorized.
   Before it: chore/state-postm99-batch (this record, on main M103 88b149dd). This batch's other
@@ -8265,7 +8514,12 @@ CURRENT_BRANCH=chore/state-lean-release (this record, on main M105 6a8477ed). Th
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=M105 6a8477ed (main, #372, the last merge before this record): push CI 45940620977
+LAST_GREEN_SHA=M107 8adf8877 (main, #374, the last merge before this record): push CI 46035609105
+  and Reproducible build 46035608880, both success at 8adf8877; PR #374's 12 checks all green at the
+  authorized head 8437d447; MERGE_VERIFY PASS (parents f996acdc and 8437d447, tree 8b468fa6, as
+  predicted); the PR held SIX commits (the package said seven: a count error the owner corrected in
+  the T3; head and tree unchanged).
+  Before it: M105 6a8477ed (main, #372, the last merge before this record): push CI 45940620977
   and Reproducible build 45940620979, both success at 6a8477ed; PR #372's 12 checks all green at the
   authorized head e24efa59; MERGE_VERIFY PASS (parents 8e04f3cb and e24efa59, tree f2b60d8d, as
   predicted).
@@ -8742,7 +8996,9 @@ LAST_GREEN_SHA=M105 6a8477ed (main, #372, the last merge before this record): pu
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS 2026-11-27 (this record), scanners 3/3: 9571 at its exact head; the build head 9571
+LAST_VERIFY=PASS 2026-11-27 (this record), scanners 3/3: 9583 at its exact head; the activation head
+  9583 (8437d447, the exact clean head).
+  Before it: PASS 2026-11-27 (this record), scanners 3/3: 9571 at its exact head; the build head 9571
   (e24efa59, the exact clean head).
   Before it: PASS 2026-11-26 (this record), scanners 3/3: 9502 at its exact head; the integrated
   batch tree 9502 (the four-branch tree 799f5cb6); the kernel head 9362 (bb1fded; aaf8d20 has the
@@ -9169,7 +9425,11 @@ LAST_VERIFY=PASS 2026-11-27 (this record), scanners 3/3: 9571 at its exact head;
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=NONE. Codex in this batch: 10 (task-1093 the serving-path audit; task-1094 S1;
+CODEX_PENDING=NONE. Codex in this batch: 4 (task-1102 the activation change; task-1103 the targeted
+  repair from the master's browser check; task-1104 step 9, history option A; task-1105 the
+  no-saved-claim Detail fix), each re-gated and its actual diff read by the master. No API key, no
+  paid fallback, $0.
+  Before it: NONE. Codex in this batch: 10 (task-1093 the serving-path audit; task-1094 S1;
   task-1095 S2; task-1096 and task-1098 S3; task-1097 S4, two runs, the first NEEDS_DECISION with no
   change; task-1099, task-1100 and task-1101 the review repairs), each re-gated and its actual diff
   read by the master. No API key, no paid fallback, $0.
@@ -9427,6 +9687,14 @@ GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
 OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-11-27, after this record): none inside the window
+  (no Space change). The P6 production-rights confirmation; then the release T4 after 2026-12-07
+  (through scripts/release.py; one-shot), batched if wished with the one EXP-09 read and the disable
+  and the token renewal (before 2026-12-18T09:27Z); then the post-release browser check and the
+  STATE close-out. Main carries the switch ON: any deploy from main is the release; never deploy
+  main without the P6 confirmation and the owner's release T4, and any other T4 that needs a deploy
+  before then (e.g. the pilot disable) ships a reviewed tree with LEAN_REFERENCE_ENABLED = False.
+  Also: the UOR relay delivery (drafted; not authorized); the release of UOR HOLD #4.
+  Before it: THE OWNER'S NEXT DECISIONS (2026-11-27, after this record): none inside the window
   (no Space change). The P6 rights fact (.work/lean_release_20261126/P6_RIGHTS_REVIEW.md: read the
   Binance terms shown for the owner's own account region, or record that there is no account); then
   the EXP-03 authorization (.work/lean_release_20261126/EXP03_REHEARSAL_PACKAGE.md) and the read of
@@ -11006,6 +11274,18 @@ OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-11-27, after this record): none 
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
 NEXT_ACTION=Claude: after this record merges, verify its CI/build and keep local main at 0118cfaa
+  (HOLD #4); through the window, read the Space's public runtime and the scheduled run list
+  passively, saving each reading raw under .work/ng4_window_20261123/obs/ before parsing. **Never
+  rerun EXP-03 (consumed), the EXP-05 stage-0 map (manifest b59f0479…) or the EXP-04 validation
+  (manifest cc81488d…); never rerun the deploy of 49ab0855 or the apply (run 44133908695), never
+  dispatch .github/workflows/apply-migration-0019.yml again; never rerun preflight runs 43916685548,
+  44012717250, 44039032076 or 44113873249; never dispatch the EXP-09 route without the owner's
+  one-shot authorization; never run the credential helper; no Space change inside the pilot window;
+  no release without the owner's T4 and the P6 confirmation; main carries the switch ON, so any
+  deploy from main is the release, and any other deploy-needing T4 before it ships a reviewed tree
+  with LEAN_REFERENCE_ENABLED = False.** No push without a T3; no dispatch, production read or
+  write, grant, credential, live market request, real data, T4 or deploy without the owner.
+  Before it: Claude: after this record merges, verify its CI/build and keep local main at 0118cfaa
   (HOLD #4); through the window, read the Space's public runtime and the scheduled run list
   passively, saving each reading raw under .work/ng4_window_20261123/obs/ before parsing. **Never
   turn LEAN_REFERENCE_ENABLED on outside a reviewed, owner-authorized activation; never run the
