@@ -160,6 +160,7 @@ def _analysis(
         return {**state, "cvar_loss": float(state["cvar_breach_threshold"]) * 2}
 
     with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(analysis_service, "LEAN_REFERENCE_ENABLED", False)
         patch.setattr(analysis_service, "select_market_data", _select_with(book))
         evidence = harness.SKILL if lifted else harness.NO_SKILL
         patch.setattr(analysis_service, "get_cached_skill_evidence", lambda _tf: dict(evidence))

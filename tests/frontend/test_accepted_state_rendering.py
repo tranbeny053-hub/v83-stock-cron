@@ -369,6 +369,7 @@ def _select(symbol, timeframe, *, settings):
 def _analysis(timeframe: str, *, claim: bool = False, permission: bool = False) -> dict:
     key = f"{PROBABILITY_TYPE}:{METHODOLOGY}:{timeframe}"
     with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(analysis_service, "LEAN_REFERENCE_ENABLED", False)
         patch.setattr(analysis_service, "select_market_data", _select)
         evidence = SKILL if permission else NO_SKILL
         patch.setattr(analysis_service, "get_cached_skill_evidence", lambda _tf: dict(evidence))

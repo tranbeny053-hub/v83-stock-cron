@@ -103,6 +103,8 @@ PROBABILITIES = {
 
 @pytest.fixture
 def live(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(analysis_service, "LEAN_REFERENCE_ENABLED", False)
+
     def use(**kwargs):
         monkeypatch.setattr(analysis_service, "select_market_data", selection(**kwargs))
         monkeypatch.setattr(analysis_service, "get_cached_skill_evidence", lambda _tf: dict(SKILL))
@@ -604,6 +606,24 @@ def test_the_evidence_gates_entry_carries_the_backends_reason_for_the_verdict_at
     assert any(about in lowered for about in ("model", "directional", "evidence")), sentence
 
 
+def test_served_reference_gate_summary_uses_validation_copy_and_preserves_risk_clause() -> None:
+    reference = "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY"
+    expected = "Evidence gate: predictive performance has not been validated for this reference."
+    view = view_for(
+        decision_brief={"probability_type": reference}, methodology="DESCRIPTIVE_REFERENCE"
+    )
+    assert view["gates"]["summary"] == f"{expected} No risk gate is active."
+    risk = view_for(
+        decision_brief={"probability_type": reference},
+        methodology="DESCRIPTIVE_REFERENCE",
+        quant_result={
+            "gate_result": {"hard_blocks": ["SKILL_NOT_DEMONSTRATED", "TAIL_RISK_BREACH"]}
+        },
+    )
+    assert expected in risk["gates"]["summary"]
+    assert "A risk gate is active:" in risk["gates"]["summary"]
+
+
 def test_without_a_reason_the_evidence_gates_entry_is_the_fixed_sentence() -> None:
     """The builder's own default, which a caller with no verdict to speak of gets."""
 
@@ -795,6 +815,7 @@ def test_dp_f_through_the_real_selection_path(
 
     clear_symbol_universe_cache()
     provider_selection.clear_provider_cache()
+    monkeypatch.setattr(analysis_service, "LEAN_REFERENCE_ENABLED", False)
 
     def select(symbol, timeframe, *, settings):
         del settings

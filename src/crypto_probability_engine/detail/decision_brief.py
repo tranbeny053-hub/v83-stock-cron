@@ -32,18 +32,16 @@ DISCLAIMER = (
 REFERENCE_PROBABILITY_TYPE = "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY"
 REFERENCE_MODEL_READINESS = "DESCRIPTIVE_REFERENCE_UNVALIDATED"
 REFERENCE_MODEL_READINESS_COPY = (
-    "Model readiness: Descriptive reference (pooled matured frequency) — not validated."
+    "Historical-frequency reference — descriptive estimate, not validated."
 )
 REFERENCE_PROBABILITY_EXPLANATION = (
     "In band is the share of recent matured six-bar outcomes on this market whose close ended "
-    "inside today's decision band; Up and Down split the rest equally, so they carry no "
-    "direction. The outcomes overlap. A descriptive historical frequency: not a validated "
-    "forecast, not a prediction interval, not expected return, and not a trade recommendation."
+    "inside today's decision band; Up and Down split the rest equally. Symmetric by design — "
+    "no directional signal. The outcomes overlap. A descriptive historical frequency: not a "
+    "validated forecast, not a prediction interval, not expected return, and not a trade "
+    "recommendation."
 )
-REFERENCE_BANNER = (
-    "⚠️ Descriptive historical frequency — not a validated forecast. Not financial advice. "
-    "No profitability claim."
-)
+REFERENCE_BANNER = "Historical-frequency reference · Descriptive estimate — not validated."
 REFERENCE_DISCLAIMER = (
     "Descriptive historical frequency over a six-bar horizon. Not a forecast, signal, or "
     "financial advice. No profitability claim."
@@ -220,7 +218,7 @@ def _key_reasons(
     if score.get("total_score") is not None:
         if methodology == REFERENCE_METHOD:
             reasons.append(
-                "Backend score (risk pressure only; the reference has no directional edge): "
+                "Backend score (risk pressure only; direction is symmetric by design): "
                 f"{score.get('total_score')}."
             )
         else:
@@ -294,13 +292,23 @@ def reference_display(reference_state: dict, horizon_timeout_state: dict) -> dic
                 f"In band: {count} of {total} matured six-bar outcomes over the last {days} days "
                 "ended inside today's decision band."
             ),
-            "direction_line": "Up and Down are split equally: no direction.",
+            "direction_line": "Symmetric by design — no directional signal.",
             "overlap_line": "Outcomes overlap: each shares half its horizon with the next.",
             "honesty_line": (
                 "Not a validated forecast and not a prediction interval. "
                 "Not recorded for scoring."
             ),
             "extended_line": "Extended horizon: not modelled.",
+            "retention_line": (
+                "Recent Analysis keeps this reference only in the app's current session memory; "
+                "it may disappear after eviction or restart, and it is not recorded for "
+                "forecast evaluation."
+            ),
+            "history_line": (
+                "Saved as an analysis run. Available in Recent Analysis while retained in the "
+                "app's current session memory; it may disappear after eviction or restart, and "
+                "it is not recorded for forecast evaluation."
+            ),
         }
     reason = reference_state.get("reason")
     if reason == "NOT_NAMED_CELL":
@@ -314,4 +322,6 @@ def reference_display(reference_state: dict, horizon_timeout_state: dict) -> dic
         "overlap_line": "",
         "honesty_line": "",
         "extended_line": "",
+        "retention_line": None,
+        "history_line": None,
     }

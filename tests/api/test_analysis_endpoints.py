@@ -21,7 +21,7 @@ from crypto_probability_engine.persistence.repository import SupabaseRestReposit
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 
 
-def make_client() -> TestClient:
+def make_client(*, recent_run_limit: int = 100) -> TestClient:
     session_limiter.reset()
     dev_limiter.reset()
     settings = Settings(
@@ -31,6 +31,7 @@ def make_client() -> TestClient:
         dev_mode_enabled=True,
         session_cookie_secure=False,
         data_mode="fixture",
+        recent_run_limit=recent_run_limit,
     )
     return TestClient(create_app(settings))
 
@@ -842,9 +843,91 @@ def test_recent_runs_prefers_durable_rows_and_marks_missing_detail() -> None:
                 "primary_timeframe": "1D",
                 "data_source": "durable_feed",
                 "is_live_data": False,
+                "history_retention": "DURABLE",
             }
         ],
     }
+
+
+def test_recent_runs_merges_only_held_served_references_and_respects_order_and_limit() -> None:
+    client = make_client(recent_run_limit=4)
+    login(client)
+    store = client.app.state.run_store
+    store.limit = 10
+    base = {
+        "symbol": "BTC",
+        "normalized_symbol": "BTC/USDT",
+        "analysis_mode": "METRICS_ONLY",
+        "analysis_hash": "memory-hash",
+        "timeframes": {"primary": "4H"},
+        "data_quality": {"data_source": "fixture", "is_live_data": False},
+    }
+
+    def held(run_id: str, as_of: str, *, served: bool, origin: str = "USER_REQUESTED") -> None:
+        payload = {**base, "run_id": run_id, "as_of_utc": as_of}
+        if served:
+            payload["reference_state"] = {"status": "SERVED"}
+        store.put(run_id, payload, prediction_origin=origin)
+
+    held("memory-new", "2026-08-24T00:00:00Z", served=True)
+    held("memory-middle", "2026-08-21T00:00:00Z", served=True)
+    held("durable-dup", "2026-08-22T00:00:00Z", served=True)
+    held("heuristic-held", "2026-08-23T00:00:00Z", served=False)
+    held("smoke-reference", "2026-08-26T00:00:00Z", served=True, origin="CONTROLLED_SMOKE")
+    held(
+        "scheduled-reference",
+        "2026-08-27T00:00:00Z",
+        served=True,
+        origin="SCHEDULED_SHADOW_EVIDENCE",
+    )
+
+    def durable_row(run_id: str, as_of: str) -> dict:
+        return {
+            "run_id": run_id,
+            "symbol": "ETH",
+            "normalized_symbol": "ETH/USDT",
+            "analysis_mode": "METRICS_ONLY",
+            "as_of_utc": as_of,
+            "analysis_hash": f"{run_id}-hash",
+            "primary_timeframe": "1D",
+            "data_source": "durable",
+            "is_live_data": False,
+        }
+
+    class DurableRepository:
+        def recent_runs_for_origin(self, limit: int, *, prediction_origin: str) -> list[dict]:
+            assert limit == 4 and prediction_origin == "USER_REQUESTED"
+            return [
+                durable_row("durable-old", "2026-08-20T00:00:00Z"),
+                durable_row("durable-dup", "2026-08-22T00:00:00Z"),
+                durable_row("heuristic-held", "2026-08-23T00:00:00Z"),
+            ]
+
+        def persistence_status(self) -> str:
+            return "OK"
+
+        def run_ids_with_detail(self, run_ids: list[str], *, prediction_origin: str) -> set[str]:
+            return set(run_ids)
+
+    client.app.state.persistence_repository = DurableRepository()
+    response = client.get("/v1/runs").json()
+
+    assert response["source"] == "durable"
+    assert [row["run_id"] for row in response["runs"]] == [
+        "memory-new",
+        "heuristic-held",
+        "durable-dup",
+        "memory-middle",
+    ]
+    assert len({row["run_id"] for row in response["runs"]}) == 4
+    retention = {row["run_id"]: row["history_retention"] for row in response["runs"]}
+    assert retention == {
+        "memory-new": "SESSION_MEMORY",
+        "heuristic-held": "DURABLE",
+        "durable-dup": "DURABLE",
+        "memory-middle": "SESSION_MEMORY",
+    }
+    assert all(row["detail_available"] for row in response["runs"])
 
 
 def test_recent_runs_batches_detail_availability_and_preserves_mixed_truth() -> None:
@@ -940,6 +1023,7 @@ def test_recent_runs_falls_back_user_only_when_persistence_raises() -> None:
     assert payload["runs"][0]["is_live_data"] is True
     assert payload["runs"][0]["prediction_origin"] == "USER_REQUESTED"
     assert payload["runs"][0]["detail_available"] is True
+    assert payload["runs"][0]["history_retention"] == "SESSION_MEMORY"
 
 
 def test_debug_export_requires_dev_session_and_is_sanitized() -> None:

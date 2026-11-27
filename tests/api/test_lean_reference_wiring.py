@@ -204,12 +204,22 @@ def test_served_4h_uses_snapshot_skips_ledger_and_snapshots(monkeypatch):
             f"matured six-bar outcomes over the last {timeout['memory_days']} days ended inside "
             "today's decision band."
         ),
-        "direction_line": "Up and Down are split equally: no direction.",
+        "direction_line": "Symmetric by design — no directional signal.",
         "overlap_line": "Outcomes overlap: each shares half its horizon with the next.",
         "honesty_line": (
             "Not a validated forecast and not a prediction interval. Not recorded for scoring."
         ),
         "extended_line": "Extended horizon: not modelled.",
+        "retention_line": (
+            "Recent Analysis keeps this reference only in the app's current session memory; "
+            "it may disappear after eviction or restart, and it is not recorded for "
+            "forecast evaluation."
+        ),
+        "history_line": (
+            "Saved as an analysis run. Available in Recent Analysis while retained in the app's "
+            "current session memory; it may disappear after eviction or restart, and it is not "
+            "recorded for forecast evaluation."
+        ),
     }
     assert response["decision_brief"]["probability_type"] == (
         "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY"
@@ -221,7 +231,7 @@ def test_served_4h_uses_snapshot_skips_ledger_and_snapshots(monkeypatch):
     assert response["decision_brief"]["reliability_status_reason"] == "NO_SCORED_COHORT_BY_DESIGN"
     assert any(
         reason.startswith(
-            "Backend score (risk pressure only; the reference has no directional edge): "
+            "Backend score (risk pressure only; direction is symmetric by design): "
         )
         for reason in response["decision_brief"]["key_reasons"]
     )
@@ -232,11 +242,30 @@ def test_served_4h_uses_snapshot_skips_ledger_and_snapshots(monkeypatch):
     assert response["decision_brief"]["probability_explanation"].startswith(
         "In band is the share of recent matured six-bar outcomes"
     )
-    assert response["decision_brief"]["uncalibrated_banner"].startswith(
-        "⚠️ Descriptive historical frequency"
+    assert response["decision_brief"]["uncalibrated_banner"] == (
+        "Historical-frequency reference · Descriptive estimate — not validated."
     )
-    assert response["decision_brief"]["model_readiness_label"].startswith(
-        "Model readiness: Descriptive reference"
+    assert response["decision_brief"]["model_readiness_label"] == (
+        "Historical-frequency reference — descriptive estimate, not validated."
+    )
+    reliability_item = next(
+        item
+        for item in response["decision_synthesis"]["actionability_stack"]
+        if item["key"] == "calibration_reliability"
+    )
+    assert reliability_item["priority"] == 11
+    assert reliability_item["status"] == "INFO"
+    assert reliability_item["plain_english"] == (
+        "Calibration reliability: Not applicable to this descriptive reference."
+    )
+    assert "Predictive performance has not been validated for this reference." in list(
+        _strings(response["decision_view"])
+    )
+    assert "Predictive performance has not been validated for this reference." in list(
+        _strings(response["frontend_display"])
+    )
+    assert response["decision_synthesis"]["probability_interpretation"]["plain_english"] == (
+        "Symmetric by design — no directional signal."
     )
     assert response["decision_view"]["state"] == "NO_ACCEPTED_CLAIM"
     assert response["decision_view"]["evidence"]["skill_verdict"] is None
@@ -262,6 +291,12 @@ def test_served_4h_uses_snapshot_skips_ledger_and_snapshots(monkeypatch):
     assert feature_calls == []
     assert derivatives_calls == []
     assert service._peek_prediction_persistence(response)[0] == []
+    monkeypatch.setattr(service, "LEAN_REFERENCE_ENABLED", False)
+    gate_baseline = _analyze()
+    assert response["gate_result"]["hard_blocks"] == gate_baseline["gate_result"]["hard_blocks"]
+    baseline_passed = gate_baseline["gate_result"]["hard_gate_passed"]
+    assert response["gate_result"]["hard_gate_passed"] == baseline_passed
+    service._pop_prediction_persistence(gate_baseline)
 
 
 def test_served_reference_persists_run_detail_and_saved_receipt(monkeypatch):
@@ -305,9 +340,14 @@ def test_served_reference_persists_run_detail_and_saved_receipt(monkeypatch):
         saved_view["range"]["explanation"] == response["decision_brief"]["probability_explanation"]
     )
     assert saved_view["evidence"]["level"] == (
-        "Model readiness: Descriptive reference (pooled matured frequency) — not validated."
+        "Historical-frequency reference — descriptive estimate, not validated."
     )
     assert saved_view["reference"] == response["reference_state"]["display"]
+    assert saved_view["reference"]["retention_line"] == (
+        "Recent Analysis keeps this reference only in the app's current session memory; "
+        "it may disappear after eviction or restart, and it is not recorded for "
+        "forecast evaluation."
+    )
     assert repository._predictions == {}
     assert repository._feature_snapshots == {}
     assert repository._derivatives_snapshots == {}
@@ -419,6 +459,8 @@ def test_reference_state_bad_values_are_rejected_by_both_schemas():
                 "overlap_line",
                 "honesty_line",
                 "extended_line",
+                "retention_line",
+                "history_line",
             )
         },
     }
@@ -428,9 +470,27 @@ def test_reference_state_bad_values_are_rejected_by_both_schemas():
         lambda item: item.update(methodology_version="other"),
         lambda item: item.update(prediction_ledger="RECORDED_AS_x"),
         lambda item: item["display"].pop("honesty_line"),
+        lambda item: item["display"].pop("retention_line"),
     ):
         malformed = json.loads(json.dumps(valid))
         mutate(malformed)
+        with pytest.raises(ValidationError):
+            LeanReferenceState.model_validate(malformed)
+        assert list(json_validator.iter_errors(malformed))
+
+    for mutation in (
+        lambda item: item["display"].update(retention_line=None),
+        lambda item: (
+            item.update(status="UNAVAILABLE", reason="HISTORY_FAILED"),
+            item["display"].update(history_line=None, retention_line="not served"),
+        ),
+        lambda item: (
+            item.update(status="UNAVAILABLE", reason="HISTORY_FAILED"),
+            item["display"].update(history_line="not served", retention_line=None),
+        ),
+    ):
+        malformed = json.loads(json.dumps(valid))
+        mutation(malformed)
         with pytest.raises(ValidationError):
             LeanReferenceState.model_validate(malformed)
         assert list(json_validator.iter_errors(malformed))
@@ -474,12 +534,18 @@ def test_whole_analysis_response_validates_for_reference_and_fallback_paths(monk
     monkeypatch.setattr(service, "LEAN_REFERENCE_ENABLED", False)
     heuristic = _analyze()
 
-    for name, response in (
-        ("served 4H reference", served_4h),
-        ("served 15m reference", served_15m),
-        ("HISTORY_FAILED fallback", fallback),
-        ("switch-off heuristic", heuristic),
+    for name, response, status, reason in (
+        ("served 4H reference", served_4h, "SERVED", None),
+        ("served 15m reference", served_15m, "SERVED", None),
+        ("HISTORY_FAILED fallback", fallback, "UNAVAILABLE", "HISTORY_FAILED"),
+        ("switch-off heuristic", heuristic, None, None),
     ):
+        if status is None:
+            assert "reference_state" not in response, name
+        else:
+            assert response["reference_state"]["status"] == status, name
+            if status == "UNAVAILABLE":
+                assert response["reference_state"]["reason"] == reason, name
         validator = _response_validator()
         errors = list(validator.iter_errors(response))
         assert errors == [], f"{name} schema errors: {errors}"
@@ -647,6 +713,12 @@ def test_oos_pair_arm_path_is_identical_with_reference_switch(monkeypatch):
 def test_both_pipeline_switches_on_is_refused():
     with pytest.raises(RuntimeError, match="cannot both be enabled"):
         service._ensure_exclusive_pipeline_switches(True, True)
+
+
+def test_shipped_switch_defaults_to_lean_reference_only():
+    source = Path(service.__file__).read_text()
+    assert "LEAN_REFERENCE_ENABLED = True" in source
+    assert service.NG_PIPELINE_ENABLED is False
 
 
 def test_switch_off_never_constructs_reference_history_adapter(monkeypatch):

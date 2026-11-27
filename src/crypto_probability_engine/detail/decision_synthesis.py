@@ -93,6 +93,8 @@ def build_decision_synthesis(
         probability=probability,
         quant_result=quant_result,
         reliability_status=reliability_status,
+        descriptive_reference=decision_brief.get("probability_type")
+        == "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY",
     )
     decision_conditions = _what_would_change_decision(
         label=label,
@@ -381,9 +383,7 @@ def _probability_interpretation(
     is_reference = methodology == "DESCRIPTIVE_REFERENCE"
     if is_reference:
         interpretation_label = "BALANCED"
-        plain_english = (
-            "The descriptive reference splits Up and Down equally, so it has no directional lean."
-        )
+        plain_english = "Symmetric by design — no directional signal."
     elif directional_edge is None:
         interpretation_label = "UNAVAILABLE"
         plain_english = "Directional probability values are unavailable for interpretation."
@@ -566,6 +566,7 @@ def _actionability_stack(
     probability: dict,
     quant_result: dict,
     reliability_status: str,
+    descriptive_reference: bool = False,
 ) -> list[dict]:
     hard_blocks = set(gate.get("hard_blocks") or [])
     data_status = str(data_quality.get("status") or "UNKNOWN")
@@ -663,7 +664,11 @@ def _actionability_stack(
             "hard_gates",
             "BLOCK" if _hard_gate_active(gate) else "PASS",
             "Hard gates",
-            hard_gate_summary(gate, liquidity)
+            hard_gate_summary(
+                gate,
+                liquidity,
+                descriptive_reference=descriptive_reference,
+            )
             if _hard_gate_active(gate)
             else "Hard gates are clear.",
             ["gate_result.hard_gate_passed", "gate_result.hard_blocks"],
@@ -721,9 +726,15 @@ def _actionability_stack(
         _check(
             11,
             "calibration_reliability",
-            "PASS" if reliability_status == "MEASURED" else "WARN",
+            "INFO"
+            if descriptive_reference
+            else "PASS"
+            if reliability_status == "MEASURED"
+            else "WARN",
             "Calibration reliability",
-            f"Reliability status is {reliability_status}.",
+            "Calibration reliability: Not applicable to this descriptive reference."
+            if descriptive_reference
+            else f"Reliability status is {reliability_status}.",
             ["calibration_state.reliability_status"],
         ),
         _check(

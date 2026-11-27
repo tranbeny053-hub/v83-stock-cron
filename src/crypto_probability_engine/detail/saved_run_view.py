@@ -49,6 +49,7 @@ from crypto_probability_engine.detail.gate_kinds import (
     ELEVATED_RISK_TOKEN,
     NOT_FORCED_BY_A_RISK_GATE,
     SAVED_EVIDENCE_GATE_DETAIL,
+    SAVED_REFERENCE_EVIDENCE_GATE_DETAIL,
     build_gate_view,
     elevated_risk_is_a_risk_finding,
     hard_gate_active,
@@ -89,7 +90,12 @@ def build_saved_run_view(detail: Mapping[str, Any]) -> dict[str, Any]:
         "gates": None
         if gate is None
         else build_gate_view(
-            gate, liquidity=liquidity, evidence_detail=SAVED_EVIDENCE_GATE_DETAIL
+            gate,
+            liquidity=liquidity,
+            evidence_detail=(
+                SAVED_REFERENCE_EVIDENCE_GATE_DETAIL if reference else SAVED_EVIDENCE_GATE_DETAIL
+            ),
+            descriptive_reference=reference,
         ),
         "gates_note": GATES_NOT_READABLE if gate is None else None,
         "disposition": _disposition(gate, score, liquidity),

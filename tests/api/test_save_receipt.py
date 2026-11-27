@@ -18,7 +18,7 @@ from collections import OrderedDict
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -82,8 +82,11 @@ class Store:
     kept under the origin that is asked for.
     """
 
-    def __init__(self, forecast: object = KEPT) -> None:
+    def __init__(
+        self, forecast: object = KEPT, *, fail_path: str | None = None
+    ) -> None:
         self.forecast = forecast
+        self.fail_path = fail_path
         self.kept: dict[str, tuple[str, dict | None]] = {}
         self.calls: list[tuple[str, str]] = []
 
@@ -92,6 +95,8 @@ class Store:
         self.calls.append((request.method, path))
         if request.method == "GET":
             return self._read(path, request.url.params)
+        if path == self.fail_path:
+            return httpx.Response(503, json={"message": "write unavailable"})
         if path != FORECAST:
             return httpx.Response(201)
         if isinstance(self.forecast, Exception):
@@ -187,8 +192,8 @@ def client_with(repository: object) -> TestClient:
     return client
 
 
-def analyze(client: TestClient) -> dict:
-    response = client.post("/v1/analyze", json=ANALYZE)
+def analyze(client: TestClient, request: dict | None = None) -> dict:
+    response = client.post("/v1/analyze", json=request or ANALYZE)
     assert response.status_code == 200
     return response.json()
 
@@ -212,9 +217,19 @@ def assert_run_not_found(client: TestClient, run_id: str) -> None:
     }
 
 
+def assert_receipt_not_saved(client: TestClient, run_id: str) -> None:
+    response = client.get(f"/v1/analyze/receipt/{run_id}")
+    if response.status_code == 404:
+        assert response.json()["detail"]["error"]["code"] == "RUN_NOT_FOUND"
+        return
+    assert response.status_code == 200, response.text
+    assert response.json()["state"] != "SAVED"
+
+
 # ------------------------------------------------------------------------ the contract
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_an_acknowledged_durable_save_reads_saved_in_the_exact_contract() -> None:
     store = Store()
     client = client_with(rest(store))
@@ -247,6 +262,7 @@ def test_an_acknowledged_durable_save_reads_saved_in_the_exact_contract() -> Non
     ],
     ids=["503", "transport-error", "refused", "unreadable", "detail-not-kept", "snapshot-not-kept"],
 )
+@pytest.mark.usefixtures("lean_reference_off")
 def test_a_save_the_store_did_not_acknowledge_reads_failed(forecast: object) -> None:
     """The audit's case: storage read "available" when the analysis ran, and the save failed."""
 
@@ -259,6 +275,43 @@ def test_a_save_the_store_did_not_acknowledge_reads_failed(forecast: object) -> 
     assert store.sent("POST", FORECAST) == 1, "the save was sent"
     assert state(client, payload["run_id"]) == "FAILED"
     assert store.kept == {}
+
+
+def test_served_reference_receipt_requires_durable_run_and_detail_acknowledgement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tests.api.test_lean_reference_wiring import HistoryAdapter, _setup
+
+    def served_client(store: Store, *, omit_detail: bool = False) -> TestClient:
+        _setup(monkeypatch)
+        monkeypatch.setattr(analysis_service, "uuid4", uuid4)
+        monkeypatch.setattr(
+            analysis_service, "_reference_history_adapter", lambda _settings: HistoryAdapter(None)
+        )
+        repository = rest(store)
+        if omit_detail:
+            repository.save_run_detail = None
+        return client_with(repository)
+
+    healthy_store = Store()
+    healthy = served_client(healthy_store)
+    healthy_payload = analyze(healthy)
+    assert healthy_payload["reference_state"]["status"] == "SERVED"
+    assert state(healthy, healthy_payload["run_id"]) == "SAVED"
+    assert healthy_store.sent("POST", "analysis_run_details") == 1
+
+    failed_store = Store(fail_path="analysis_runs")
+    failed = served_client(failed_store)
+    failed_payload = analyze(failed)
+    assert failed_payload["reference_state"]["status"] == "SERVED"
+    assert state(failed, failed_payload["run_id"]) == "FAILED"
+
+    no_detail_store = Store()
+    no_detail = served_client(no_detail_store, omit_detail=True)
+    no_detail_payload = analyze(no_detail)
+    assert no_detail_payload["reference_state"]["status"] == "SERVED"
+    assert state(no_detail, no_detail_payload["run_id"]) == "FAILED"
+    assert no_detail_store.sent("POST", "analysis_run_details") == 0
 
 
 def test_unavailable_storage_reads_failed_and_sends_nothing() -> None:
@@ -338,6 +391,7 @@ def test_the_real_executor_settles_the_receipt_from_its_own_thread(
     assert state(client, run_id) == "SAVED"
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_a_pending_receipt_becomes_failed_when_the_held_save_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -463,7 +517,10 @@ def test_after_a_restart_only_the_durable_store_can_say_saved(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = Store()
-    saved = analyze(client_with(rest(store)))["run_id"]
+    saved = analyze(
+        client_with(rest(store)),
+        {"symbol": "DOGE", "analysis_mode": "METRICS_ONLY", "timeframe": "4H"},
+    )["run_id"]
     store.forecast = httpx.Response(503)
     failed = analyze(client_with(rest(store)))["run_id"]
 
@@ -474,6 +531,48 @@ def test_after_a_restart_only_the_durable_store_can_say_saved(
     assert store.sent("GET", "analysis_run_details") == 1
     # A save that failed left nothing durable: after the restart the run is simply unknown.
     assert_run_not_found(restarted, failed)
+
+
+def test_served_reference_history_is_session_memory_across_restart_and_eviction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tests.api.test_lean_reference_wiring import HistoryAdapter, _setup
+
+    _setup(monkeypatch)
+    monkeypatch.setattr(analysis_service, "uuid4", uuid4)
+    monkeypatch.setattr(
+        analysis_service, "_reference_history_adapter", lambda _settings: HistoryAdapter(None)
+    )
+    store = Store()
+    repository = rest(store)
+    client = make_client(recent_run_limit=1)
+    client.app.state.persistence_repository = repository
+    login(client)
+
+    served = analyze(client)
+    run_id = served["run_id"]
+    assert served["reference_state"]["status"] == "SERVED"
+    assert state(client, run_id) == "SAVED"
+    listed = client.get("/v1/runs").json()
+    assert [row["run_id"] for row in listed["runs"]] == [run_id]
+    assert listed["runs"][0]["history_retention"] == "SESSION_MEMORY"
+    assert client.get(f"/v1/analyze/detail/{run_id}").status_code == 200
+
+    restarted = restart(monkeypatch, repository)
+    assert restarted.get("/v1/runs").json()["runs"] == []
+    assert_run_not_found(restarted, run_id)
+    assert_receipt_not_saved(restarted, run_id)
+
+    # A newer heuristic run evicts the reference from the bounded in-process store.
+    monkeypatch.setattr(analysis_service, "uuid4", lambda: UUID(int=1314))
+    analyze(
+        client,
+        {"symbol": "DOGE", "analysis_mode": "METRICS_ONLY", "timeframe": "4H"},
+    )
+    assert client.get("/v1/runs").json()["runs"] == []
+    assert_run_not_found(client, run_id)
+    monkeypatch.setattr(save_receipt, "SAVE_RECEIPTS", SaveReceipts())
+    assert_receipt_not_saved(client, run_id)
 
 
 def test_after_a_restart_an_unreadable_store_proves_nothing(
@@ -492,6 +591,7 @@ def test_after_a_restart_an_unreadable_store_proves_nothing(
     assert_run_not_found(restart(monkeypatch, Unreadable()), run_id)
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_a_stateless_repository_never_reads_saved(monkeypatch: pytest.MonkeyPatch) -> None:
     """It answers the detail route from process memory. That is not a durable copy."""
 
@@ -506,6 +606,7 @@ def test_a_stateless_repository_never_reads_saved(monkeypatch: pytest.MonkeyPatc
     assert_run_not_found(same_repository_new_store, "run_that_never_was")
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_a_held_run_without_a_record_asks_the_store(
     receipts: SaveReceipts, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -533,6 +634,7 @@ def test_a_held_run_without_a_record_asks_the_store(
     ],
     ids=["saved", "failed", "no-repository"],
 )
+@pytest.mark.usefixtures("lean_reference_off")
 def test_a_record_still_answers_when_the_run_store_has_let_the_run_go(
     repository, expected: str
 ) -> None:
@@ -552,6 +654,7 @@ def test_a_record_still_answers_when_the_run_store_has_let_the_run_go(
 # ------------------------------------------------------------------------ batch
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_each_ok_item_of_a_batch_has_its_own_receipt() -> None:
     store = Store()
     client = client_with(rest(store))
@@ -575,6 +678,7 @@ def test_each_ok_item_of_a_batch_has_its_own_receipt() -> None:
     assert set(store.kept) == set(run_ids)
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_a_batch_item_whose_save_fails_reads_failed_beside_one_that_is_saved(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -622,6 +726,7 @@ def frozen_analysis(monkeypatch: pytest.MonkeyPatch, repository: object) -> http
     return response
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_the_analyze_response_is_what_it_was_before_the_receipt_existed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

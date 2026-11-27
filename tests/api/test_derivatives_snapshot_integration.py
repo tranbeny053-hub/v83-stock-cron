@@ -4,6 +4,8 @@ from copy import deepcopy
 from datetime import timedelta
 from uuid import UUID
 
+import pytest
+
 import crypto_probability_engine.api.analysis_service as analysis_service
 from crypto_probability_engine.adapters.provider_selection import ProviderSelectionResult
 from crypto_probability_engine.api.analysis_service import _pop_prediction_persistence
@@ -86,6 +88,7 @@ def _analyze(*, enabled: bool) -> dict:
     )
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_analysis_handoff_skips_disabled_and_remembers_eligible_snapshot(monkeypatch) -> None:
     monkeypatch.setattr(analysis_service, "select_market_data", _live_selection)
     monkeypatch.setattr(analysis_service, "uuid4", lambda: UUID(int=19))
@@ -110,6 +113,7 @@ def test_analysis_handoff_skips_disabled_and_remembers_eligible_snapshot(monkeyp
     assert derivatives_rows[0]["block_status"] == "UNAVAILABLE"
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_snapshot_builder_failure_does_not_change_or_fail_analysis(monkeypatch) -> None:
     monkeypatch.setattr(analysis_service, "select_market_data", _live_selection)
     monkeypatch.setattr(analysis_service, "uuid4", lambda: UUID(int=23))
@@ -133,6 +137,7 @@ def test_snapshot_builder_failure_does_not_change_or_fail_analysis(monkeypatch) 
     assert actual_work[:3] == baseline_work[:3]
 
 
+@pytest.mark.usefixtures("lean_reference_off")
 def test_snapshot_projection_does_not_mutate_response_block(monkeypatch) -> None:
     monkeypatch.setattr(analysis_service, "select_market_data", _live_selection)
     monkeypatch.setattr(analysis_service, "uuid4", lambda: UUID(int=29))

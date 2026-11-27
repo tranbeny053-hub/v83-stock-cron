@@ -87,13 +87,12 @@ def test_screens_use_the_unmodified_product_function_list() -> None:
 def test_reference_card_adds_no_label_when_backend_labels_are_absent() -> None:
     source = card.APP_JS.read_text(encoding="utf-8")
     start = source.index(
-        "if (referenceBrief?.probability_type === "
-        '"DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY")'
+        "if (servedReference && backendText(referenceBrief.uncalibrated_banner))"
     )
     end = source.index("\n  }", start) + 4
     branch = source[start:end]
     assert '"Descriptive reference"' not in branch
-    assert "if (referenceLabel.textContent)" in branch
+    assert "referenceLabel.textContent = referenceBrief.uncalibrated_banner" in branch
 
 
 def test_the_analyses_cover_what_the_check_must_tell_apart(
