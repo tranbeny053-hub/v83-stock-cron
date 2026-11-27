@@ -20,7 +20,9 @@ DRIFT_SHA = "d" * 40
 # Guarded source files that currently differ between the deployed pin and this tree.
 # It goes non-empty whenever a guarded change is merged but not yet deployed, and empties
 # again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned.
-# task-1104: add the served-reference history merge and retention marker to the API route.
+# The Lean release (owner P1-P10 and the activation, 2026-11-26/27; LOCAL, not deployed) changes
+# these
+# guarded files.
 CURRENT_DELTA_PATHS: list[str] = [
     "frontend/app.js",
     "frontend/index.html",

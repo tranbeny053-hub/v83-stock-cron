@@ -484,6 +484,10 @@ def test_reference_state_bad_values_are_rejected_by_both_schemas():
             item.update(status="UNAVAILABLE", reason="HISTORY_FAILED"),
             item["display"].update(history_line=None, retention_line="not served"),
         ),
+        lambda item: (
+            item.update(status="UNAVAILABLE", reason="HISTORY_FAILED"),
+            item["display"].update(history_line="not served", retention_line=None),
+        ),
     ):
         malformed = json.loads(json.dumps(valid))
         mutation(malformed)

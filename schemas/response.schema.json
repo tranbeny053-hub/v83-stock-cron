@@ -272,7 +272,7 @@
                     "SNAPSHOT_MISMATCH", "SHORT_SNAPSHOT", "HISTORY_FAILED", "HISTORY_INVALID",
                     "HISTORY_CONFLICT"
                   ] },
-                  "display": { "properties": { "history_line": { "type": ["string", "null"] }, "retention_line": { "type": ["null"] } } }
+                  "display": { "properties": { "history_line": { "type": ["null"] }, "retention_line": { "type": ["null"] } } }
                 }
               }
             }
