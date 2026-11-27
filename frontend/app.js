@@ -857,7 +857,7 @@ const saveReceiptWatches = new Map();
 
 // The text of a receipt the backend gave for this run, or null when the answer is not one this
 // screen can show: no answer, another schema version, another run's receipt, an unknown state.
-function saveReceiptText(receipt, runId) {
+function saveReceiptText(receipt, runId, payload = {}) {
   if (
     !receipt ||
     receipt.schema_version !== SAVE_RECEIPT_SCHEMA_VERSION ||
@@ -866,6 +866,14 @@ function saveReceiptText(receipt, runId) {
     !Object.prototype.hasOwnProperty.call(SAVE_RECEIPT_TEXT, receipt.state)
   ) {
     return null;
+  }
+  if (
+    receipt.state === "SAVED" &&
+    payload.reference_state?.status === "SERVED" &&
+    typeof payload.reference_state.display?.history_line === "string" &&
+    payload.reference_state.display.history_line.trim()
+  ) {
+    return payload.reference_state.display.history_line;
   }
   return SAVE_RECEIPT_TEXT[receipt.state];
 }
@@ -944,7 +952,7 @@ function watchSaveReceipt(surface, place, payload, container) {
     if (watch.stopped) {
       return;
     }
-    const text = saveReceiptText(receipt, payload.run_id);
+    const text = saveReceiptText(receipt, payload.run_id, payload);
     if (text !== null) {
       cell.textContent = text;
     }
@@ -2375,7 +2383,7 @@ function renderReferenceDisplay(display) {
   const title = document.createElement("strong");
   title.textContent = display.title;
   block.append(title);
-  for (const key of ["count_line", "direction_line", "overlap_line", "honesty_line", "extended_line"]) {
+  for (const key of ["count_line", "direction_line", "overlap_line", "honesty_line", "extended_line", "history_line"]) {
     if (typeof display[key] !== "string" || !display[key].trim()) continue;
     const line = document.createElement("p");
     line.textContent = display[key];

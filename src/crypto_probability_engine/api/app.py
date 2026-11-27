@@ -383,6 +383,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         origin = PredictionOrigin.USER_REQUESTED.value
         repository = app.state.persistence_repository
         source = "durable"
+        session_memory_ids: set[str] = set()
         try:
             rows = repository.recent_runs_for_origin(
                 app_settings.recent_run_limit,
@@ -397,6 +398,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 for row in run_store.list_runs()
                 if row.get("prediction_origin") == origin
             ]
+            session_memory_ids = {str(row.get("run_id")) for row in rows}
+
+        if source == "durable":
+            durable_ids = {str(row.get("run_id")) for row in rows}
+            for row in run_store.list_runs():
+                run_id = str(row.get("run_id"))
+                held_payload = run_store.get(run_id) or {}
+                reference_state = held_payload.get("reference_state") or {}
+                if (
+                    row.get("prediction_origin") == origin
+                    and reference_state.get("status") == "SERVED"
+                    and run_id not in durable_ids
+                ):
+                    rows.append(row)
+                    durable_ids.add(run_id)
+                    session_memory_ids.add(run_id)
+            if session_memory_ids:
+                # Re-order only when a held reference was merged; durable order is otherwise kept.
+                rows.sort(key=lambda row: str(row.get("run_id") or ""))
+                rows.sort(key=lambda row: str(row.get("as_of_utc") or ""), reverse=True)
+                rows = rows[: app_settings.recent_run_limit]
 
         durable_only_ids = [
             str(row.get("run_id"))
@@ -426,6 +448,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "prediction_origin": origin,
                     "detail_available": in_process_detail
                     or run_id in durable_detail_ids,
+                    "history_retention": (
+                        "SESSION_MEMORY" if run_id in session_memory_ids else "DURABLE"
+                    ),
                     "primary_timeframe": row.get("primary_timeframe"),
                     "data_source": row.get("data_source"),
                     "is_live_data": row.get("is_live_data"),

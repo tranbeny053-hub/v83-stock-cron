@@ -108,7 +108,6 @@ def test_the_core_refuses_a_mixed_recorded_and_isolated_call(
         )
 
 
-@pytest.mark.usefixtures("lean_reference_off")
 def test_isolated_and_recorded_analyses_are_byte_identical_but_for_the_human_view(
     fixture_market, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -127,20 +126,52 @@ def test_isolated_and_recorded_analyses_are_byte_identical_but_for_the_human_vie
 
     monkeypatch.setattr(analysis_service, "stable_hash", capture)
     settings = Settings(data_mode="fixture")
-    isolated = analysis_service.analyze_request_isolated(_request(), settings=settings)
+    unnamed_request = AnalysisRequest(symbol="DOGE", timeframe="4H")
+    isolated = analysis_service.analyze_request_isolated(unnamed_request, settings=settings)
     store = InMemoryRunStore()
-    recorded = analysis_service.analyze_request(_request(), settings=settings, run_store=store)
+    recorded = analysis_service.analyze_request(unnamed_request, settings=settings, run_store=store)
     try:
         isolated_input, recorded_input = hashed
         assert "decision_view" not in isolated and "decision_view" not in isolated_input
         assert recorded["decision_view"]["schema_version"] == "decision_view.v2"
         assert recorded_input.pop("decision_view") == recorded["decision_view"]
+        # With the switch on, the recorded path also carries its unavailable-reference notice.
+        # Compare the shared heuristic analysis byte-for-byte after removing that presentation
+        # metadata, as well as the human-only DecisionView.
+        assert recorded_input.pop("reference_state")["reason"] == "NOT_NAMED_CELL"
+        recorded_input["detail_view"].pop("reference_state", None)
         assert recorded_input == isolated_input
         assert real_hash(recorded_input) == isolated["analysis_hash"] != recorded["analysis_hash"]
         human = {key: value for key, value in recorded.items() if key != "decision_view"}
+        human.pop("reference_state")
+        human["detail_view"].pop("reference_state", None)
         assert json.dumps({**isolated, "analysis_hash": ""}, sort_keys=True) == json.dumps(
             {**human, "analysis_hash": ""}, sort_keys=True
         )
+    finally:
+        analysis_service._pop_prediction_persistence(recorded)  # noqa: SLF001 - clean up
+
+
+def test_named_cell_serves_reference_only_for_recorded_analysis(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tests.api.test_lean_reference_wiring import HistoryAdapter, _setup
+
+    _setup(monkeypatch)
+    monkeypatch.setattr(
+        analysis_service, "_reference_history_adapter", lambda _settings: HistoryAdapter(None)
+    )
+    settings = Settings(data_mode="fixture", provider_priority=("binance",))
+    request = _request()
+    isolated = analysis_service.analyze_request_isolated(request, settings=settings)
+    store = InMemoryRunStore()
+    recorded = analysis_service.analyze_request(request, settings=settings, run_store=store)
+    try:
+        assert "reference_state" not in isolated
+        assert recorded["reference_state"]["status"] == "SERVED"
+        assert recorded["gate_result"]["hard_blocks"] == isolated["gate_result"]["hard_blocks"]
+        isolated_passed = isolated["gate_result"]["hard_gate_passed"]
+        assert recorded["gate_result"]["hard_gate_passed"] == isolated_passed
     finally:
         analysis_service._pop_prediction_persistence(recorded)  # noqa: SLF001 - clean up
 

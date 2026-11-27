@@ -239,30 +239,41 @@
             "prediction_ledger": { "enum": ["NOT_RECORDED_BY_DESIGN", "HEURISTIC_COHORT"] },
             "display": {
               "type": "object", "additionalProperties": false,
-              "required": ["title", "count_line", "direction_line", "overlap_line", "honesty_line", "extended_line"],
+              "required": ["title", "count_line", "direction_line", "overlap_line", "honesty_line", "extended_line", "history_line"],
               "properties": {
                 "title": { "type": "string" },
                 "count_line": { "type": "string" },
                 "direction_line": { "type": "string" },
                 "overlap_line": { "type": "string" },
                 "honesty_line": { "type": "string" },
-                "extended_line": { "type": "string" }
+                "extended_line": { "type": "string" },
+                "history_line": { "type": ["string", "null"] }
               }
             }
           },
           "allOf": [
             {
               "if": { "properties": { "status": { "const": "SERVED" } }, "required": ["status"] },
-              "then": { "properties": { "reason": { "type": "null" } } }
+              "then": {
+                "properties": {
+                  "reason": { "type": "null" },
+                  "display": { "properties": { "history_line": { "type": "string" } } }
+                }
+              }
             },
             {
               "if": { "properties": { "status": { "const": "UNAVAILABLE" } }, "required": ["status"] },
-              "then": { "properties": { "reason": { "type": "string", "enum": [
-                "NOT_NAMED_CELL", "VENUE_NOT_BINANCE", "TIMEFRAME_UNSUPPORTED", "BAND_UNAVAILABLE",
-                "WINDOW_SHORT", "WINDOW_MALFORMED", "K_MISMATCH", "BARS_OUT_OF_RANGE",
-                "SNAPSHOT_MISMATCH", "SHORT_SNAPSHOT", "HISTORY_FAILED", "HISTORY_INVALID",
-                "HISTORY_CONFLICT"
-              ] } } }
+              "then": {
+                "properties": {
+                  "reason": { "type": "string", "enum": [
+                    "NOT_NAMED_CELL", "VENUE_NOT_BINANCE", "TIMEFRAME_UNSUPPORTED", "BAND_UNAVAILABLE",
+                    "WINDOW_SHORT", "WINDOW_MALFORMED", "K_MISMATCH", "BARS_OUT_OF_RANGE",
+                    "SNAPSHOT_MISMATCH", "SHORT_SNAPSHOT", "HISTORY_FAILED", "HISTORY_INVALID",
+                    "HISTORY_CONFLICT"
+                  ] },
+                  "display": { "properties": { "history_line": { "type": ["string", "null"] } } }
+                }
+              }
             }
           ]
         }

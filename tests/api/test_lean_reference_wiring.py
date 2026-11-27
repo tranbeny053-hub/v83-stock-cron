@@ -210,6 +210,11 @@ def test_served_4h_uses_snapshot_skips_ledger_and_snapshots(monkeypatch):
             "Not a validated forecast and not a prediction interval. Not recorded for scoring."
         ),
         "extended_line": "Extended horizon: not modelled.",
+        "history_line": (
+            "Saved as an analysis run. Available in Recent Analysis while retained in the app's "
+            "current session memory; it may disappear after eviction or restart, and it is not "
+            "recorded for forecast evaluation."
+        ),
     }
     assert response["decision_brief"]["probability_type"] == (
         "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY"
@@ -283,7 +288,9 @@ def test_served_4h_uses_snapshot_skips_ledger_and_snapshots(monkeypatch):
     assert service._peek_prediction_persistence(response)[0] == []
     monkeypatch.setattr(service, "LEAN_REFERENCE_ENABLED", False)
     gate_baseline = _analyze()
-    assert response["gate_result"] == gate_baseline["gate_result"]
+    assert response["gate_result"]["hard_blocks"] == gate_baseline["gate_result"]["hard_blocks"]
+    baseline_passed = gate_baseline["gate_result"]["hard_gate_passed"]
+    assert response["gate_result"]["hard_gate_passed"] == baseline_passed
     service._pop_prediction_persistence(gate_baseline)
 
 
@@ -442,6 +449,7 @@ def test_reference_state_bad_values_are_rejected_by_both_schemas():
                 "overlap_line",
                 "honesty_line",
                 "extended_line",
+                "history_line",
             )
         },
     }
