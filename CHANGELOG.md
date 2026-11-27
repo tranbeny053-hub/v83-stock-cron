@@ -2,6 +2,40 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-11-27 - The Lean Quant Release: the dormant pooled reference (on main, not released)
+
+It records #372, and the three dormant NGA tools of #368, #369 and #370. Nothing in this entry is released:
+production still serves 49ab0855. The reference is switched off (`LEAN_REFERENCE_ENABLED = False`), so every response
+is unchanged apart from the static banner text of the next deploy.
+
+Added:
+- #372: `quant_ng/reference_pooled.py`, the methodology `reference-pooled-tk-v1` (owner rulings P1-P10, 2026-11-26).
+  - **What it measures:** the share T/K of matured six-bar terminal returns that ended inside the request-time cost
+    band, over a pooled 7-day (15m) or 28-day (1H, 4H) memory on the 3-bar lattice. K is exactly 224, 224 or 56 for
+    a full gap-free window.
+  - **What it leaves out:** no prior, no fitted constant, no new threshold and no interval.
+  - **The rest of the triplet:** Up and Down split the rest equally, so the reference carries no direction.
+- #372: `quant_ng/pipeline_ng.py` gains `run_pipeline_reference`. It shares the legacy feature, score, gate and hash
+  steps, and replaces only the probability and timeout states.
+- #372: `api/analysis_service.py` wires the reference behind the switch, and only for USER_REQUESTED default-method
+  analyses of nine named cells: BTC/USDT, ETH/USDT and SOL/USDT at 15m, 1H and 4H on Binance.
+  - **Fallback:** every refusal falls back to the heuristic, with its reason in `reference_state`.
+  - **Data:** 15m and 1H make one bounded Binance klines request; 4H uses the snapshot.
+  - **Persistence:** a served reference writes no prediction, feature or derivatives row. Its run row and its detail
+    are saved, and the detail carries `reference_state`.
+- #372: `reference_state` in the response model and `schemas/response.schema.json`, closed and conditional.
+- #372: the brief, synthesis, decision view, saved-run view and `frontend/app.js` carry the reference's own identity
+  ("descriptive historical frequency, not a validated forecast"). The banner is true for both methodologies.
+- #368: `scripts/quant_ng_capture_log.py`, dormant, MOCK-only checks of the proposed capture-time contract.
+- #369: `scripts/quant_ng_share_kernel.py`, the exact synthetic risk map of coefficient-prior sharing (EXP-05 stage 0,
+  run once and consumed, nothing adopted).
+- #370: `scripts/quant_ng_object_name.py`, the token-safe reversible object-name encoding (C-2 naming option (b)).
+
+Changed:
+- #372: the `quant_ng` import guard names the new statements exactly and now refuses dynamic imports.
+- #372: the history-capability pin names the single call site, inside the reference branch.
+- #372: `CURRENT_DELTA_PATHS` lists the guarded files changed and not yet deployed.
+
 ## 2026-11-26 - EXP-04: the stage-1 synthetic null harness (on main, not released)
 
 It records #365, and the documentation correction in #364. Nothing in this entry is released: production still
